@@ -1,0 +1,159 @@
+2026-06-23T00:01:47.625+05:30  WARN 4000 --- [godown] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=5m20s72ms831µs100ns).
+2026-06-23T00:01:47.691+05:30  INFO 4000 --- [godown] [SpringApplicationShutdownHook] o.s.boot.tomcat.GracefulShutdown         : Commencing graceful shutdown. Waiting for active requests to complete
+2026-06-23T00:01:47.856+05:30 DEBUG 4000 --- [godown] [http-nio-8080-exec-1] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T00:01:47.904+05:30  INFO 4000 --- [godown] [tomcat-shutdown] o.s.boot.tomcat.GracefulShutdown         : Graceful shutdown complete
+2026-06-23T00:01:47.940+05:30  INFO 4000 --- [godown] [SpringApplicationShutdownHook] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-06-23T00:01:47.949+05:30  INFO 4000 --- [godown] [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-06-23T00:01:47.963+05:30  INFO 4000 --- [godown] [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
+2026-06-23T00:15:42.149+05:30  INFO 25840 --- [godown] [main] c.shyam.kamak.godown.GodownApplication   : Starting GodownApplication using Java 26.0.1 with PID 25840 (F:\Shyam\godown\target\classes started by shobh in F:\Shyam\godown)
+2026-06-23T00:15:42.154+05:30  INFO 25840 --- [godown] [main] c.shyam.kamak.godown.GodownApplication   : No active profile set, falling back to 1 default profile: "default"
+2026-06-23T00:15:43.699+05:30  INFO 25840 --- [godown] [main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-06-23T00:15:43.811+05:30  INFO 25840 --- [godown] [main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 100 ms. Found 5 JPA repository interfaces.
+2026-06-23T00:15:44.958+05:30  INFO 25840 --- [godown] [main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-06-23T00:15:44.985+05:30  INFO 25840 --- [godown] [main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-06-23T00:15:44.987+05:30  INFO 25840 --- [godown] [main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.22]
+2026-06-23T00:15:45.121+05:30  INFO 25840 --- [godown] [main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 2891 ms
+2026-06-23T00:15:45.524+05:30  INFO 25840 --- [godown] [main] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-06-23T00:15:45.617+05:30  INFO 25840 --- [godown] [main] org.hibernate.orm.core                   : HHH000001: Hibernate ORM core version 7.4.1.Final
+2026-06-23T00:15:46.246+05:30  INFO 25840 --- [godown] [main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-06-23T00:15:46.287+05:30  INFO 25840 --- [godown] [main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-06-23T00:15:46.506+05:30  INFO 25840 --- [godown] [main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@5c7c75fb
+2026-06-23T00:15:46.509+05:30  INFO 25840 --- [godown] [main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-06-23T00:15:46.573+05:30  WARN 25840 --- [godown] [main] org.hibernate.orm.deprecation            : HHH90000025: MySQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-06-23T00:15:46.607+05:30  INFO 25840 --- [godown] [main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:mysql://localhost:3306/fabric_factory_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true]
+	Database driver: MySQL Connector/J
+	Database dialect: MySQLDialect
+	Database version: 8.0.41
+	Default catalog/schema: fabric_factory_db/undefined
+	Autocommit mode: undefined/unknown
+	Isolation level: REPEATABLE_READ [default REPEATABLE_READ]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-06-23T00:15:48.308+05:30  INFO 25840 --- [godown] [main] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-06-23T00:15:48.545+05:30  INFO 25840 --- [godown] [main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-06-23T00:15:48.635+05:30  INFO 25840 --- [godown] [main] o.s.d.j.r.query.QueryEnhancerFactories   : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-06-23T00:15:48.990+05:30  INFO 25840 --- [godown] [main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name customUserDetailsService
+2026-06-23T00:15:50.294+05:30  WARN 25840 --- [godown] [main] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-06-23T00:15:50.652+05:30 DEBUG 25840 --- [godown] [main] o.s.s.web.DefaultSecurityFilterChain     : Will secure any request with filters: DisableEncodeUrlFilter, WebAsyncManagerIntegrationFilter, SecurityContextHolderFilter, HeaderWriterFilter, CorsFilter, LogoutFilter, JwtAuthenticationFilter, RequestCacheAwareFilter, SecurityContextHolderAwareRequestFilter, AnonymousAuthenticationFilter, ExceptionTranslationFilter, AuthorizationFilter
+2026-06-23T00:15:51.452+05:30  INFO 25840 --- [godown] [main] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 8080 (http) with context path '/'
+2026-06-23T00:15:51.463+05:30  INFO 25840 --- [godown] [main] c.shyam.kamak.godown.GodownApplication   : Started GodownApplication in 10.05 seconds (process running for 10.703)
+2026-06-23T00:15:51.476+05:30  WARN 25840 --- [godown] [main] o.s.core.events.SpringDocAppInitializer  : SpringDoc /v3/api-docs endpoint is enabled by default. To disable it in production, set the property 'springdoc.api-docs.enabled=false'
+2026-06-23T00:15:51.478+05:30  WARN 25840 --- [godown] [main] o.s.core.events.SpringDocAppInitializer  : SpringDoc /swagger-ui.html endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+2026-06-23T00:16:15.738+05:30  INFO 25840 --- [godown] [http-nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-06-23T00:16:15.738+05:30  INFO 25840 --- [godown] [http-nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-06-23T00:16:15.741+05:30  INFO 25840 --- [godown] [http-nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2026-06-23T00:16:15.768+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-1] o.s.security.web.FilterChainProxy        : Securing PUT /api/v1/bundles/1
+2026-06-23T00:16:15.813+05:30  INFO 25840 --- [godown] [http-nio-8080-exec-1] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T00:16:15.822+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-1] o.s.security.web.FilterChainProxy        : Secured PUT /api/v1/bundles/1
+2026-06-23T00:16:16.178+05:30  WARN 25840 --- [godown] [http-nio-8080-exec-1] o.h.v.i.m.a.CascadingMetaDataBuilder     : HV000271: Using `@Valid` on a container (java.util.List) is deprecated. You should apply the annotation on the type argument(s). Affected element: items
+2026-06-23T00:16:16.962+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-1] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T00:16:18.235+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-2] o.s.security.web.FilterChainProxy        : Securing PUT /api/v1/bundles/1
+2026-06-23T00:16:18.235+05:30  INFO 25840 --- [godown] [http-nio-8080-exec-2] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T00:16:18.235+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-2] o.s.security.web.FilterChainProxy        : Secured PUT /api/v1/bundles/1
+2026-06-23T00:16:18.301+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-2] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T00:16:19.266+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-3] o.s.security.web.FilterChainProxy        : Securing PUT /api/v1/bundles/1
+2026-06-23T00:16:19.268+05:30  INFO 25840 --- [godown] [http-nio-8080-exec-3] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T00:16:19.270+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-3] o.s.security.web.FilterChainProxy        : Secured PUT /api/v1/bundles/1
+2026-06-23T00:16:19.316+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-3] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T00:16:20.312+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-4] o.s.security.web.FilterChainProxy        : Securing PUT /api/v1/bundles/1
+2026-06-23T00:16:20.314+05:30  INFO 25840 --- [godown] [http-nio-8080-exec-4] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T00:16:20.322+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-4] o.s.security.web.FilterChainProxy        : Secured PUT /api/v1/bundles/1
+2026-06-23T00:16:20.377+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-4] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T00:17:17.873+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-6] o.s.security.web.FilterChainProxy        : Securing POST /api/v1/fabrics
+2026-06-23T00:17:17.873+05:30  INFO 25840 --- [godown] [http-nio-8080-exec-6] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T00:17:17.882+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-6] o.s.security.web.FilterChainProxy        : Secured POST /api/v1/fabrics
+2026-06-23T00:17:18.176+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-6] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T00:17:46.280+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-9] o.s.security.web.FilterChainProxy        : Securing POST /api/v1/fabrics
+2026-06-23T00:17:46.280+05:30  INFO 25840 --- [godown] [http-nio-8080-exec-9] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T00:17:46.280+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-9] o.s.security.web.FilterChainProxy        : Secured POST /api/v1/fabrics
+2026-06-23T00:17:46.315+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-9] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T00:18:24.476+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-1] o.s.security.web.FilterChainProxy        : Securing PUT /api/v1/bundles/1
+2026-06-23T00:18:24.481+05:30  INFO 25840 --- [godown] [http-nio-8080-exec-1] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T00:18:24.481+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-1] o.s.security.web.FilterChainProxy        : Secured PUT /api/v1/bundles/1
+2026-06-23T00:18:24.506+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-1] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T00:18:52.972+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-3] o.s.security.web.FilterChainProxy        : Securing PUT /api/v1/bundles/1
+2026-06-23T00:18:52.972+05:30  INFO 25840 --- [godown] [http-nio-8080-exec-3] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T00:18:52.972+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-3] o.s.security.web.FilterChainProxy        : Secured PUT /api/v1/bundles/1
+2026-06-23T00:18:53.025+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-3] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T00:19:05.152+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-4] o.s.security.web.FilterChainProxy        : Securing PUT /api/v1/bundles/1
+2026-06-23T00:19:05.156+05:30  INFO 25840 --- [godown] [http-nio-8080-exec-4] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T00:19:05.156+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-4] o.s.security.web.FilterChainProxy        : Secured PUT /api/v1/bundles/1
+2026-06-23T00:19:05.281+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-4] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T00:19:20.968+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-5] o.s.security.web.FilterChainProxy        : Securing PUT /api/v1/bundles/1
+2026-06-23T00:19:20.971+05:30  INFO 25840 --- [godown] [http-nio-8080-exec-5] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T00:19:20.971+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-5] o.s.security.web.FilterChainProxy        : Secured PUT /api/v1/bundles/1
+2026-06-23T00:19:21.106+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-5] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T00:59:46.522+05:30  WARN 25840 --- [godown] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=29m29s676ms784µs200ns).
+2026-06-23T01:23:19.479+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-1] o.s.security.web.FilterChainProxy        : Securing POST /api/v1/sales-bills
+2026-06-23T01:23:19.481+05:30  INFO 25840 --- [godown] [http-nio-8080-exec-1] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T01:23:19.481+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-1] o.s.security.web.FilterChainProxy        : Secured POST /api/v1/sales-bills
+2026-06-23T01:23:19.523+05:30 DEBUG 25840 --- [godown] [http-nio-8080-exec-1] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T01:24:25.069+05:30  INFO 25840 --- [godown] [SpringApplicationShutdownHook] o.s.boot.tomcat.GracefulShutdown         : Commencing graceful shutdown. Waiting for active requests to complete
+2026-06-23T01:24:25.081+05:30  INFO 25840 --- [godown] [tomcat-shutdown] o.s.boot.tomcat.GracefulShutdown         : Graceful shutdown complete
+2026-06-23T01:24:25.093+05:30  INFO 25840 --- [godown] [SpringApplicationShutdownHook] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-06-23T01:24:25.099+05:30  INFO 25840 --- [godown] [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-06-23T01:24:25.104+05:30  INFO 25840 --- [godown] [SpringApplicationShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
+2026-06-23T01:24:30.475+05:30  INFO 36580 --- [godown] [main] c.shyam.kamak.godown.GodownApplication   : Starting GodownApplication using Java 26.0.1 with PID 36580 (F:\Shyam\godown\target\classes started by shobh in F:\Shyam\godown)
+2026-06-23T01:24:30.480+05:30  INFO 36580 --- [godown] [main] c.shyam.kamak.godown.GodownApplication   : No active profile set, falling back to 1 default profile: "default"
+2026-06-23T01:24:32.019+05:30  INFO 36580 --- [godown] [main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-06-23T01:24:32.135+05:30  INFO 36580 --- [godown] [main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 103 ms. Found 5 JPA repository interfaces.
+2026-06-23T01:24:33.291+05:30  INFO 36580 --- [godown] [main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-06-23T01:24:33.312+05:30  INFO 36580 --- [godown] [main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-06-23T01:24:33.313+05:30  INFO 36580 --- [godown] [main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.22]
+2026-06-23T01:24:33.440+05:30  INFO 36580 --- [godown] [main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 2884 ms
+2026-06-23T01:24:33.770+05:30  INFO 36580 --- [godown] [main] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-06-23T01:24:33.858+05:30  INFO 36580 --- [godown] [main] org.hibernate.orm.core                   : HHH000001: Hibernate ORM core version 7.4.1.Final
+2026-06-23T01:24:34.507+05:30  INFO 36580 --- [godown] [main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-06-23T01:24:34.548+05:30  INFO 36580 --- [godown] [main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-06-23T01:24:34.779+05:30  INFO 36580 --- [godown] [main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@66682e8f
+2026-06-23T01:24:34.782+05:30  INFO 36580 --- [godown] [main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-06-23T01:24:34.849+05:30  WARN 36580 --- [godown] [main] org.hibernate.orm.deprecation            : HHH90000025: MySQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-06-23T01:24:34.875+05:30  INFO 36580 --- [godown] [main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:mysql://localhost:3306/fabric_factory_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true]
+	Database driver: MySQL Connector/J
+	Database dialect: MySQLDialect
+	Database version: 8.0.41
+	Default catalog/schema: fabric_factory_db/undefined
+	Autocommit mode: undefined/unknown
+	Isolation level: REPEATABLE_READ [default REPEATABLE_READ]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-06-23T01:24:36.494+05:30  INFO 36580 --- [godown] [main] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-06-23T01:24:36.836+05:30  INFO 36580 --- [godown] [main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-06-23T01:24:36.920+05:30  INFO 36580 --- [godown] [main] o.s.d.j.r.query.QueryEnhancerFactories   : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-06-23T01:24:37.266+05:30  INFO 36580 --- [godown] [main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name customUserDetailsService
+2026-06-23T01:24:38.617+05:30  WARN 36580 --- [godown] [main] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-06-23T01:24:38.963+05:30 DEBUG 36580 --- [godown] [main] o.s.s.web.DefaultSecurityFilterChain     : Will secure any request with filters: DisableEncodeUrlFilter, WebAsyncManagerIntegrationFilter, SecurityContextHolderFilter, HeaderWriterFilter, CorsFilter, LogoutFilter, JwtAuthenticationFilter, RequestCacheAwareFilter, SecurityContextHolderAwareRequestFilter, AnonymousAuthenticationFilter, ExceptionTranslationFilter, AuthorizationFilter
+2026-06-23T01:24:39.723+05:30  INFO 36580 --- [godown] [main] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 8080 (http) with context path '/'
+2026-06-23T01:24:39.735+05:30  INFO 36580 --- [godown] [main] c.shyam.kamak.godown.GodownApplication   : Started GodownApplication in 10.002 seconds (process running for 10.643)
+2026-06-23T01:24:39.741+05:30  WARN 36580 --- [godown] [main] o.s.core.events.SpringDocAppInitializer  : SpringDoc /v3/api-docs endpoint is enabled by default. To disable it in production, set the property 'springdoc.api-docs.enabled=false'
+2026-06-23T01:24:39.742+05:30  WARN 36580 --- [godown] [main] o.s.core.events.SpringDocAppInitializer  : SpringDoc /swagger-ui.html endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+2026-06-23T01:25:06.915+05:30  INFO 36580 --- [godown] [http-nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-06-23T01:25:06.917+05:30  INFO 36580 --- [godown] [http-nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-06-23T01:25:06.921+05:30  INFO 36580 --- [godown] [http-nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 4 ms
+2026-06-23T01:25:06.948+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-1] o.s.security.web.FilterChainProxy        : Securing POST /api/v1/sales-bills
+2026-06-23T01:25:06.992+05:30  INFO 36580 --- [godown] [http-nio-8080-exec-1] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T01:25:06.992+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-1] o.s.security.web.FilterChainProxy        : Secured POST /api/v1/sales-bills
+2026-06-23T01:25:07.365+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-1] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T01:26:05.145+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-2] o.s.security.web.FilterChainProxy        : Securing POST /api/v1/sales-bills
+2026-06-23T01:26:05.149+05:30  INFO 36580 --- [godown] [http-nio-8080-exec-2] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T01:26:05.154+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-2] o.s.security.web.FilterChainProxy        : Secured POST /api/v1/sales-bills
+2026-06-23T01:26:05.742+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-2] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T01:26:37.877+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-8] o.s.security.web.FilterChainProxy        : Securing POST /api/v1/sales-bills
+2026-06-23T01:26:37.881+05:30  INFO 36580 --- [godown] [http-nio-8080-exec-8] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T01:26:37.881+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-8] o.s.security.web.FilterChainProxy        : Secured POST /api/v1/sales-bills
+2026-06-23T01:26:38.045+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-8] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T01:26:46.195+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-4] o.s.security.web.FilterChainProxy        : Securing POST /api/v1/sales-bills
+2026-06-23T01:26:46.205+05:30  INFO 36580 --- [godown] [http-nio-8080-exec-4] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T01:26:46.205+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-4] o.s.security.web.FilterChainProxy        : Secured POST /api/v1/sales-bills
+2026-06-23T01:26:46.238+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-4] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
+2026-06-23T02:01:37.838+05:30  WARN 36580 --- [godown] [HikariPool-1:housekeeper] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=1m2s344ms843µs100ns).
+2026-06-23T02:12:30.854+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-5] o.s.security.web.FilterChainProxy        : Securing POST /api/v1/sales-bills
+2026-06-23T02:12:30.855+05:30  INFO 36580 --- [godown] [http-nio-8080-exec-5] c.s.k.g.s.JwtAuthenticationFilter        : disableJwt flag is set to: true
+2026-06-23T02:12:30.859+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-5] o.s.security.web.FilterChainProxy        : Secured POST /api/v1/sales-bills
+2026-06-23T02:12:30.924+05:30 DEBUG 36580 --- [godown] [http-nio-8080-exec-5] o.s.s.w.a.AnonymousAuthenticationFilter  : Set SecurityContextHolder to anonymous SecurityContext
