@@ -52,6 +52,11 @@ public class SalesBillController {
         salesBillService.deleteBill(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/preview")
+    public ResponseEntity<SalesBillResponseDTO> previewBill(@Valid @RequestBody SalesBillRequestDTO request) {
+        return ResponseEntity.ok(salesBillService.previewBill(request));
+    }
 }
 //@RestController
 //@RequestMapping("/api/v1/sales-bills")

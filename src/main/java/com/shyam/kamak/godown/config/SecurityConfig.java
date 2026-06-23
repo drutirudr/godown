@@ -107,7 +107,7 @@ public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Excepti
         CorsConfiguration configuration = new CorsConfiguration();
 
         // Match the exact origin of your frontend (No trailing slash!)
-        configuration.setAllowedOrigins(List.of("http://localhost:3000"));
+        configuration.setAllowedOrigins(List.of("http://localhost:5173"));
 
         // Explicitly allow standard HTTP methods
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));

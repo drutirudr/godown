@@ -4,10 +4,7 @@ import com.shyam.kamak.godown.dto.SalesBillRequestDTO;
 import com.shyam.kamak.godown.dto.SalesBillResponseDTO;
 import com.shyam.kamak.godown.exception.ResourceNotFoundException;
 import com.shyam.kamak.godown.mapper.SalesBillMapper;
-import com.shyam.kamak.godown.model.Bundle;
-import com.shyam.kamak.godown.model.Customer;
-import com.shyam.kamak.godown.model.SalesBill;
-import com.shyam.kamak.godown.model.SalesBillItem;
+import com.shyam.kamak.godown.model.*;
 import com.shyam.kamak.godown.repository.BundleRepository;
 import com.shyam.kamak.godown.repository.CustomerRepository;
 import com.shyam.kamak.godown.repository.SalesBillRepository;
@@ -167,6 +164,89 @@ public class SalesBillService {
     @Transactional(readOnly = true) public SalesBillResponseDTO getBillById(Long id) { return salesBillRepository.findById(id).map(salesBillMapper::toResponseDto).orElseThrow(() -> new ResourceNotFoundException("Bill not found")); }
     @Transactional(readOnly = true) public List<SalesBillResponseDTO> getAllBills() { return salesBillRepository.findAll().stream().map(salesBillMapper::toResponseDto).toList(); }
     @Transactional public void deleteBill(Long id) { SalesBill bill = salesBillRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Bill not found")); bill.getItems().forEach(item -> item.getBundle().setSold(false)); salesBillRepository.delete(bill); }
+
+    @Transactional(readOnly = true)
+    public SalesBillResponseDTO previewBill(SalesBillRequestDTO request) {
+        // Mock a provisional bill identifier for display purposes
+        String provisionalFY = FinancialYearUtil.getCurrentFinancialYear();
+
+        Customer customer = customerRepository.findById(request.getCustomerId())
+                .orElseThrow(() -> new ResourceNotFoundException("Customer context missing for preview."));
+
+        SalesBill previewBill = SalesBill.builder()
+                .billNumber("PREVIEW")
+                .financialYear(provisionalFY)
+                .customer(customer)
+                .discountType(request.getDiscountType())
+                .discountRate(request.getDiscountRate())
+                .taxType(request.getTaxType())
+                .taxRate(request.getTaxRate())
+                .build();
+
+        // Architectural Win: Execute calculation logic without saving or altering bundle "isSold" state in DB
+        calculatePreviewTotals(previewBill, request.getBundleNumbers());
+
+        return salesBillMapper.toResponseDto(previewBill);
+    }
+
+    private void calculatePreviewTotals(SalesBill salesBill, Set<String> bundleNumbers) {
+        BigDecimal runningSubtotal = BigDecimal.ZERO;
+
+        for (String combinedBarcode : bundleNumbers) {
+            String[] parts = combinedBarcode.trim().split("-(?=[^-]*$)");
+            if (parts.length < 2) {
+                throw new IllegalArgumentException("Invalid barcode format. Expected: FYXX-XX-NNNNN");
+            }
+            String financialYear = parts[0];
+            String bundleNumber = parts[1];
+
+            Bundle bundle = bundleRepository.findByBundleNumberAndFinancialYear(bundleNumber, financialYear)
+                    .orElseThrow(() -> new ResourceNotFoundException("Bundle missing: " + combinedBarcode));
+
+            // CRITICAL ARCHITECTURAL DIFFERENCE:
+            // We omit the bundle.setSold(true) check here because this is a non-binding mock preview calculation.
+
+            int bundleTotalRolls = bundle.getItems().stream().mapToInt(BundleItem::getNumberOfRolls).sum();
+            BigDecimal bundleTotalMeters = bundle.getItems().stream()
+                    .map(item -> BigDecimal.valueOf(item.getNumberOfRolls()).multiply(item.getMetersPerRoll()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            BigDecimal bundleTotalValue = bundle.getItems().stream()
+                    .map(item -> BigDecimal.valueOf(item.getNumberOfRolls())
+                            .multiply(item.getMetersPerRoll())
+                            .multiply(item.getFrozenCostPerMeter()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            SalesBillItem billItem = SalesBillItem.builder()
+                    .bundle(bundle)
+                    .totalRolls(bundleTotalRolls)
+                    .totalMeters(bundleTotalMeters)
+                    .subtotal(bundleTotalValue)
+                    .build();
+
+            salesBill.addItem(billItem);
+            runningSubtotal = runningSubtotal.add(bundleTotalValue);
+        }
+
+        salesBill.setSubtotalAmount(runningSubtotal);
+
+        // Discount Engine Math
+        BigDecimal discountAmount = salesBill.getDiscountType() == SalesBill.CalculationType.PERCENT
+                ? runningSubtotal.multiply(salesBill.getDiscountRate()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
+                : salesBill.getDiscountRate();
+        salesBill.setDiscountAmount(discountAmount);
+
+        BigDecimal netAfterDiscount = runningSubtotal.subtract(discountAmount);
+        if (netAfterDiscount.compareTo(BigDecimal.ZERO) < 0) netAfterDiscount = BigDecimal.ZERO;
+
+        // Tax Engine Math
+        BigDecimal taxAmount = salesBill.getTaxType() == SalesBill.CalculationType.PERCENT
+                ? netAfterDiscount.multiply(salesBill.getTaxRate()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
+                : salesBill.getTaxRate();
+        salesBill.setTaxAmount(taxAmount);
+
+        salesBill.setGrandTotal(netAfterDiscount.add(taxAmount));
+    }
 }
 //import com.shyam.kamak.godown.dto.SalesBillRequestDTO;
 //import com.shyam.kamak.godown.dto.SalesBillResponseDTO;
