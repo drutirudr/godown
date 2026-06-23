@@ -6,6 +6,9 @@ import com.shyam.kamak.godown.service.CustomerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -39,9 +42,16 @@ public class CustomerController {
         return ResponseEntity.ok(customerService.getCustomerById(id));
     }
 
-    @GetMapping
+    @GetMapping("/all")
     public ResponseEntity<List<CustomerResponseDTO>> getAllCustomers() {
         return ResponseEntity.ok(customerService.getAllCustomers());
+    }
+
+    @GetMapping("/paged")
+    public ResponseEntity<Page<CustomerResponseDTO>> getAllCustomers(
+            @PageableDefault(size = 2, sort = "id") Pageable pageable) {
+        Page<CustomerResponseDTO> customers = customerService.getAllCustomers(pageable);
+        return ResponseEntity.ok(customers);
     }
 
     @DeleteMapping("/{id}")

@@ -19,7 +19,7 @@ public class CustomerRequestDTO {
         private String name;
 
         @NotBlank(message = "Contact number is required")
-        @Pattern(regexp = "^\\+?[0-9]{10,15}$", message = "Contact number must be a valid phone number between 10 and 15 digits")
+        @Pattern(regexp = "^\\d{10}$", message = "Contact number must be exactly 10 digits")
         private String contactNumber;
 
         @NotBlank(message = "Address is required")
@@ -35,7 +35,7 @@ public class CustomerRequestDTO {
         private String state;
 
         @NotBlank(message = "Pincode is required")
-        @Pattern(regexp = "^[0-9]{5,10}$", message = "Pincode must be between 5 and 10 digits numeric values")
+        @Pattern(regexp = "^\\d{6}$", message = "Pincode must be exactly 6 digits")
         private String pincode;
 }
 //import jakarta.validation.constraints.NotBlank;

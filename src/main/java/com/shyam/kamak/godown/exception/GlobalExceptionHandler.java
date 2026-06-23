@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
@@ -40,6 +41,18 @@ public class GlobalExceptionHandler {
         body.put("errors", errors);
         return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
     }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, String>> handleTypeMismatchExceptions(
+            HttpMessageNotReadableException ex) {
+
+        Map<String, String> error = new HashMap<>();
+        error.put("error", "Malformed JSON payload or invalid data types provided.");
+        error.put("details", ex.getMostSpecificCause().getMessage());
+
+        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+    }
+
 
     // 2. Handles custom business exceptions (like duplicate usernames)
     @ExceptionHandler(UsernameAlreadyExistsException.class)
