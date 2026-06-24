@@ -2,10 +2,17 @@ package com.shyam.kamak.godown.controller;
 
 import com.shyam.kamak.godown.dto.SalesBillRequestDTO;
 import com.shyam.kamak.godown.dto.SalesBillResponseDTO;
+import com.shyam.kamak.godown.model.SalesBill;
 import com.shyam.kamak.godown.service.SalesBillService;
+import com.shyam.kamak.godown.specification.SalesBillSpecification;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -42,7 +49,7 @@ public class SalesBillController {
         return ResponseEntity.ok(salesBillService.getBillByCombinedSearch(identifier));
     }
 
-    @GetMapping
+    @GetMapping("/all")
     public ResponseEntity<List<SalesBillResponseDTO>> getAllBills() {
         return ResponseEntity.ok(salesBillService.getAllBills());
     }
@@ -56,6 +63,26 @@ public class SalesBillController {
     @PostMapping("/preview")
     public ResponseEntity<SalesBillResponseDTO> previewBill(@Valid @RequestBody SalesBillRequestDTO request) {
         return ResponseEntity.ok(salesBillService.previewBill(request));
+    }
+
+    @GetMapping("/paged")
+    public ResponseEntity<Page<SalesBillResponseDTO>> getPagedSalesBills(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String id,
+            @RequestParam(required = false) String billNumber,
+            @RequestParam(required = false) String financialYear,
+            @RequestParam(required = false) String customerName, // Matches column mapping key from frontend grid
+            @RequestParam(required = false) String grandTotal) {
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+
+        Specification<SalesBill> spec = SalesBillSpecification.getDynamicSearchCriteria(
+                search, id, billNumber, financialYear, customerName, grandTotal
+        );
+
+        return ResponseEntity.ok(salesBillService.getAllBillsPaged(spec, pageable));
     }
 }
 //@RestController

@@ -3,6 +3,7 @@ package com.shyam.kamak.godown.service;
 import com.shyam.kamak.godown.dto.BundleItemRequestDTO;
 import com.shyam.kamak.godown.dto.BundleRequestDTO;
 import com.shyam.kamak.godown.dto.BundleResponseDTO;
+import com.shyam.kamak.godown.dto.FabricResponseDTO;
 import com.shyam.kamak.godown.exception.ResourceNotFoundException;
 import com.shyam.kamak.godown.mapper.BundleMapper;
 import com.shyam.kamak.godown.model.Bundle;
@@ -12,6 +13,9 @@ import com.shyam.kamak.godown.repository.BundleRepository;
 import com.shyam.kamak.godown.repository.FabricRepository;
 import com.shyam.kamak.godown.util.FinancialYearUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -155,12 +159,25 @@ public class BundleService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<BundleResponseDTO> getAllBundlesAvailable() {
+        return bundleRepository.findBySoldFalse().stream()
+                .map(bundleMapper::toResponseDto)
+                .toList();
+    }
+
+
     @Transactional
     public void deleteBundle(Long id) {
         Bundle bundle = bundleRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Bundle not found with id: " + id));
         validateBundleIsEditable(bundle);
         bundleRepository.delete(bundle);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<BundleResponseDTO> getAllBundlesPaged(Specification<Bundle> spec, Pageable pageable) {
+        return bundleRepository.findAll(spec, pageable).map(bundleMapper::toResponseDto);
     }
 
     private String calculateFinancialYear() {

@@ -2,19 +2,23 @@ package com.shyam.kamak.godown.repository;
 
 import com.shyam.kamak.godown.model.*;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface BundleRepository extends JpaRepository<Bundle, Long> {
+public interface BundleRepository extends JpaRepository<Bundle, Long>, JpaSpecificationExecutor<Bundle> {
 
     Optional<Bundle> findByBundleNumberAndFinancialYear(String bundleNumber, String financialYear);
 
     @Query("SELECT COALESCE(MAX(CAST(b.bundleNumber AS int)), 0) FROM Bundle b WHERE b.financialYear = :fy")
     int findMaxBundleNumberByFinancialYear(@Param("fy") String financialYear);
+
+    List<Bundle> findBySoldFalse();
 }
 //@Repository
 //public interface BundleRepository extends JpaRepository<Bundle, Long> {

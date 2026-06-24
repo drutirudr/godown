@@ -1,5 +1,6 @@
 package com.shyam.kamak.godown.service;
 
+import com.shyam.kamak.godown.dto.FabricResponseDTO;
 import com.shyam.kamak.godown.dto.SalesBillRequestDTO;
 import com.shyam.kamak.godown.dto.SalesBillResponseDTO;
 import com.shyam.kamak.godown.exception.ResourceNotFoundException;
@@ -10,6 +11,9 @@ import com.shyam.kamak.godown.repository.CustomerRepository;
 import com.shyam.kamak.godown.repository.SalesBillRepository;
 import com.shyam.kamak.godown.util.FinancialYearUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -164,6 +168,12 @@ public class SalesBillService {
     @Transactional(readOnly = true) public SalesBillResponseDTO getBillById(Long id) { return salesBillRepository.findById(id).map(salesBillMapper::toResponseDto).orElseThrow(() -> new ResourceNotFoundException("Bill not found")); }
     @Transactional(readOnly = true) public List<SalesBillResponseDTO> getAllBills() { return salesBillRepository.findAll().stream().map(salesBillMapper::toResponseDto).toList(); }
     @Transactional public void deleteBill(Long id) { SalesBill bill = salesBillRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Bill not found")); bill.getItems().forEach(item -> item.getBundle().setSold(false)); salesBillRepository.delete(bill); }
+
+
+    @Transactional(readOnly = true)
+    public Page<SalesBillResponseDTO> getAllBillsPaged(Specification<SalesBill> spec, Pageable pageable) {
+        return salesBillRepository.findAll(spec, pageable).map(salesBillMapper::toResponseDto);
+    }
 
     @Transactional(readOnly = true)
     public SalesBillResponseDTO previewBill(SalesBillRequestDTO request) {
