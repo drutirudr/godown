@@ -14,7 +14,9 @@ import com.shyam.kamak.godown.repository.FabricRepository;
 import com.shyam.kamak.godown.util.FinancialYearUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -164,6 +166,23 @@ public class BundleService {
         return bundleRepository.findBySoldFalse().stream()
                 .map(bundleMapper::toResponseDto)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<BundleResponseDTO> getSearchAvailableBundles(String query) {
+
+        // 1. Enforce a strict query limit size constraint at the database layer (Max 10 records)
+        Pageable topTenLimit = PageRequest.of(0, 10, Sort.by("bundleNumber").ascending());
+
+        // 2. Query only available matching packages
+        Page<Bundle> matchingBundles = bundleRepository.findBySoldFalseAndBundleNumberContainingIgnoreCase(query, topTenLimit);
+
+        // 3. Map values and stream results back to the client interface layer
+        List<BundleResponseDTO> responseList = matchingBundles.getContent().stream()
+                .map(bundleMapper::toResponseDto)
+                .toList();
+
+        return responseList;
     }
 
 

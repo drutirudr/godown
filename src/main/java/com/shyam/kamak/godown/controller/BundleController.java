@@ -54,6 +54,11 @@ public class BundleController {
         return ResponseEntity.ok(bundleService.getAllBundlesAvailable());
     }
 
+    @GetMapping("/search-available")
+    public ResponseEntity<List<BundleResponseDTO>> getSearchAvailableBundles(@RequestParam String query) {
+        return ResponseEntity.ok(bundleService.getSearchAvailableBundles(query));
+    }
+
     @GetMapping("/paged")
     public ResponseEntity<Page<BundleResponseDTO>> getPagedBundles(
             @RequestParam(defaultValue = "0") int page,
