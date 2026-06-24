@@ -1,13 +1,18 @@
 package com.shyam.kamak.godown.service;
 
+import com.shyam.kamak.godown.dto.CustomerResponseDTO;
 import com.shyam.kamak.godown.dto.FabricRequestDTO;
 import com.shyam.kamak.godown.dto.FabricResponseDTO;
 import com.shyam.kamak.godown.exception.ResourceNotFoundException;
 import com.shyam.kamak.godown.mapper.FabricMapper;
+import com.shyam.kamak.godown.model.Customer;
 import com.shyam.kamak.godown.model.Fabric;
 import com.shyam.kamak.godown.repository.FabricRepository;
 import com.shyam.kamak.godown.service.FabricService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
@@ -70,6 +75,11 @@ public class FabricService {
         Fabric fabric = fabricRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Fabric not found with id: " + id));
         fabricRepository.delete(fabric);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<FabricResponseDTO> getAllFabricsPaged(Specification<Fabric> spec, Pageable pageable) {
+        return fabricRepository.findAll(spec, pageable).map(fabricMapper::toResponseDto);
     }
 }
 //import com.shyam.kamak.godown.dto.FabricDTO;
