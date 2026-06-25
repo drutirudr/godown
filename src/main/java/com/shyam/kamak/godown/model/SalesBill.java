@@ -3,6 +3,7 @@ package com.shyam.kamak.godown.model;
 import jakarta.persistence.*;
 import lombok.*;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,9 +30,35 @@ public class SalesBill extends UserAuditable {
     @Column(name = "financial_year", nullable = false, length = 10)
     private String financialYear;
 
+    @Column(name = "bill_date", nullable = false)
+    private LocalDate billDate;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
+
+    // 🛡️ RELATIONAL FIX: Linked Master Table references replacing old static enums
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "type_of_bill_id", nullable = false)
+    private TypeOfBill typeOfBill;
+
+    @Column(name = "lr_number", length = 50)
+    private String lrNumber;
+
+    @Column(name = "lr_date", length = 20)
+    private String lrDate;
+
+    @Column(name = "transporter_name", length = 150)
+    private String transporterName;
+
+    @Column(name = "vehicle_number", length = 30)
+    private String vehicleNumber;
+
+    @Column(name = "eway_bill_number", length = 50)
+    private String ewayBillNumber;
+
+    @Column(name = "e_invoice_number", length = 100)
+    private String eInvoiceNumber;
 
     @Column(name = "subtotal_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal subtotalAmount;
@@ -76,141 +103,3 @@ public class SalesBill extends UserAuditable {
         item.setSalesBill(null);
     }
 }
-//import com.fasterxml.jackson.annotation.JsonManagedReference;
-//import jakarta.persistence.*;
-//import lombok.AllArgsConstructor;
-//import lombok.Builder;
-//import lombok.Getter;
-//import lombok.NoArgsConstructor;
-//import lombok.Setter;
-//import org.springframework.data.annotation.CreatedBy;
-//import org.springframework.data.annotation.CreatedDate;
-//import org.springframework.data.annotation.LastModifiedBy;
-//import org.springframework.data.annotation.LastModifiedDate;
-//import org.springframework.data.jpa.domain.support.AuditingEntityListener;
-//
-//import java.math.BigDecimal;
-//import java.time.Instant;
-//import java.util.ArrayList;
-//import java.util.List;
-//
-//@Entity
-//@Table(name = "sales_bills", uniqueConstraints = {
-//        @UniqueConstraint(columnNames = {"financial_year", "bill_sequence_number"}),
-//        @UniqueConstraint(columnNames = {"business_bill_number"})
-//})
-//@EntityListeners(AuditingEntityListener.class)
-//@Getter
-//@Setter
-//@NoArgsConstructor  // CRITICAL FIX FOR HIBERNATE REFLECTION
-//@AllArgsConstructor // CRITICAL FIX FOR ENTITY BUILDERS
-//@Builder
-//public class SalesBill {
-//    @Id
-//    @GeneratedValue(strategy = GenerationType.IDENTITY)
-//    private Long id;
-//
-//    @Column(name = "financial_year", nullable = false)
-//    private String financialYear;
-//
-//    @Column(name = "bill_sequence_number", nullable = false)
-//    private Integer billSequenceNumber;
-//
-//    @Column(name = "business_bill_number", nullable = false)
-//    private String businessBillNumber;
-//
-//    @ManyToOne(fetch = FetchType.EAGER)
-//    @JoinColumn(name = "customer_id", nullable = false)
-//    private Customer customer;
-//
-//    @Column(name = "bill_date", nullable = false)
-//    private Instant billDate = Instant.now();
-//
-//    @Column(name = "sub_total", nullable = false, precision = 14, scale = 2)
-//    private BigDecimal subTotal = BigDecimal.ZERO;
-//
-//    @Enumerated(EnumType.STRING)
-//    @Column(name = "discount_type", nullable = false)
-//    private DiscountType discountType = DiscountType.NONE;
-//
-//    @Column(name = "discount_rate", nullable = false, precision = 14, scale = 2)
-//    private BigDecimal discountRate = BigDecimal.ZERO;
-//
-//    @Column(name = "discount_amount", nullable = false, precision = 14, scale = 2)
-//    private BigDecimal discountAmount = BigDecimal.ZERO;
-//
-//    @Enumerated(EnumType.STRING)
-//    @Column(name = "tax_type", nullable = false)
-//    private TaxType taxType = TaxType.NONE;
-//
-//    @Column(name = "tax_rate_percent", nullable = false, precision = 5, scale = 2)
-//    private BigDecimal taxRatePercent = BigDecimal.ZERO;
-//
-//    @Column(name = "tax_amount", nullable = false, precision = 14, scale = 2)
-//    private BigDecimal taxAmount = BigDecimal.ZERO;
-//
-//    @Column(name = "grand_total", nullable = false, precision = 14, scale = 2)
-//    private BigDecimal grandTotal = BigDecimal.ZERO;
-//
-//    @JsonManagedReference
-//    @OneToMany(mappedBy = "salesBill", cascade = CascadeType.ALL, orphanRemoval = true, targetEntity = SalesBillItem.class)
-//    private List<SalesBillItem> salesBillItems = new ArrayList<>();
-//
-//    @CreatedDate
-//    @Column(name = "created_at", nullable = false, updatable = false)
-//    private Instant createdAt;
-//
-//    @LastModifiedDate
-//    @Column(name = "updated_at", nullable = false)
-//    private Instant updatedAt;
-//
-//    @CreatedBy
-//    @Column(name = "created_by", updatable = false, length = 50)
-//    private String createdBy;
-//
-//    @LastModifiedBy
-//    @Column(name = "updated_by", length = 50)
-//    private String updatedBy;
-//
-//    public void setSalesBillItems(List<SalesBillItem> items) {
-//        this.salesBillItems.clear();
-//        if (items != null) {
-//            items.forEach(item -> {
-//                item.setSalesBill(this);
-//                this.salesBillItems.add(item);
-//            });
-//        }
-//    }
-//}
-//
-////@Entity @Table(name = "sales_bills")
-////@Getter @Setter @NoArgsConstructor @AllArgsConstructor
-////public class SalesBill {
-////    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
-////    @Column(name = "financial_year", nullable = false) private String financialYear;
-////    @Column(name = "bill_sequence_number", nullable = false) private Integer billSequenceNumber;
-////    @Column(name = "business_bill_number", nullable = false) private String businessBillNumber;
-////    @ManyToOne(fetch = FetchType.EAGER) @JoinColumn(name = "customer_id", nullable = false) private Customer customer;
-////    @Column(name = "bill_date", nullable = false) private LocalDateTime billDate = LocalDateTime.now();
-////    @Column(name = "sub_total", nullable = false, precision = 14, scale = 2) private BigDecimal subTotal = BigDecimal.ZERO;
-////    @Enumerated(EnumType.STRING) @Column(name = "discount_type", nullable = false) private DiscountType discountType = DiscountType.NONE;
-////    @Column(name = "discount_rate", nullable = false, precision = 14, scale = 2) private BigDecimal discountRate = BigDecimal.ZERO;
-////    @Column(name = "discount_amount", nullable = false, precision = 14, scale = 2) private BigDecimal discountAmount = BigDecimal.ZERO;
-////    @Enumerated(EnumType.STRING) @Column(name = "tax_type", nullable = false) private TaxType taxType = TaxType.NONE;
-////    @Column(name = "tax_rate_percent", nullable = false, precision = 5, scale = 2) private BigDecimal taxRatePercent = BigDecimal.ZERO;
-////    @Column(name = "tax_amount", nullable = false, precision = 14, scale = 2) private BigDecimal taxAmount = BigDecimal.ZERO;
-////    @Column(name = "grand_total", nullable = false, precision = 14, scale = 2) private BigDecimal grandTotal = BigDecimal.ZERO;
-////
-////    @JsonManagedReference
-////    @OneToMany(mappedBy = "salesBill", cascade = CascadeType.ALL, orphanRemoval = true, targetEntity = SalesBillItem.class)
-////    private List<SalesBillItem> salesBillItems = new ArrayList<>();
-////
-////    @Column(name = "created_at", updatable = false) private LocalDateTime createdAt = LocalDateTime.now();
-////    @Column(name = "updated_at") private LocalDateTime updatedAt = LocalDateTime.now();
-////
-////    public void setSalesBillItems(List<SalesBillItem> items) {
-////        this.salesBillItems.clear();
-////        if (items != null) { items.forEach(item -> { item.setSalesBill(this); this.salesBillItems.add(item); }); }
-////    }
-////}
-//

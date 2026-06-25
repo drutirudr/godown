@@ -18,6 +18,11 @@ public interface SalesBillMapper {
 
     @Mapping(target = "customerId", source = "customer.id")
     @Mapping(target = "customerName", source = "customer.name")
+    // ➕ RELATIONAL TABLE AUTO-MAPPING COMPILATION EXTENSIONS
+    @Mapping(target = "typeOfBillId", source = "typeOfBill.id")
+    @Mapping(target = "typeOfBillName", source = "typeOfBill.name")
+    @Mapping(target = "typeOfBillCode", source = "typeOfBill.code")
+    @Mapping(target = "typeOfBillGroup", source = "typeOfBill.groupType")
     SalesBillResponseDTO toResponseDto(SalesBill salesBill);
 
     @Mapping(target = "bundleId", source = "bundle.id")

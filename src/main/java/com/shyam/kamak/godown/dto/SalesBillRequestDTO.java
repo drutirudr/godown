@@ -6,12 +6,26 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Set;
 
 @Data
 public class SalesBillRequestDTO {
     @NotNull(message = "Customer ID is required")
     private Long customerId;
+
+    @NotNull(message = "TypeOfBill Reference Identifier is required")
+    private Long typeOfBillId; // Links directly to the new master database table row ID
+
+    @NotNull(message = "Bill Date is required")
+    private LocalDate billDate;
+
+    private String lrNumber;
+    private String lrDate;
+    private String transporterName;
+    private String vehicleNumber;
+    private String ewayBillNumber;
+    private String eInvoiceNumber;
 
     @NotNull(message = "Discount type is required")
     private SalesBill.CalculationType discountType;
@@ -28,19 +42,5 @@ public class SalesBillRequestDTO {
     private BigDecimal taxRate;
 
     @NotEmpty(message = "At least one bundle identification label is required")
-    private Set<String> bundleNumbers; // Supports comma/space separated inputs clean-mapped by frontend
+    private Set<String> bundleNumbers;
 }
-//import com.shyam.kamak.godown.model.DiscountType;
-//import com.shyam.kamak.godown.model.TaxType;
-//import java.util.List;
-//
-//public record SalesBillRequestDTO(
-//        Long customerId,
-//        List<Long> bundleIds,
-//        DiscountType discountType,
-//        Double discountRate,
-//        TaxType taxType,
-//        Double taxRatePercent
-//) {}
-//
-

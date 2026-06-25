@@ -9,6 +9,7 @@ import com.shyam.kamak.godown.model.*;
 import com.shyam.kamak.godown.repository.BundleRepository;
 import com.shyam.kamak.godown.repository.CustomerRepository;
 import com.shyam.kamak.godown.repository.SalesBillRepository;
+import com.shyam.kamak.godown.repository.TypeOfBillRepository;
 import com.shyam.kamak.godown.util.FinancialYearUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -30,6 +31,7 @@ public class SalesBillService {
     private final BundleRepository bundleRepository;
     private final CustomerRepository customerRepository;
     private final SalesBillMapper salesBillMapper;
+    private final TypeOfBillRepository typeOfBillRepository;
 
     @Transactional
     public SalesBillResponseDTO createBill(SalesBillRequestDTO request) {
@@ -39,10 +41,22 @@ public class SalesBillService {
         Customer customer = customerRepository.findById(request.getCustomerId())
                 .orElseThrow(() -> new ResourceNotFoundException("Customer record not found."));
 
+        // 🛡️ LOOKUP LAYER ENFORCEMENT: Enforces validation of relational master row selections
+        TypeOfBill typeOfBill = typeOfBillRepository.findById(request.getTypeOfBillId())
+                .orElseThrow(() -> new ResourceNotFoundException("Selected Bill Type record not found in system registers."));
+
         SalesBill salesBill = SalesBill.builder()
                 .billNumber(billNumber)
                 .financialYear(currentFY)
                 .customer(customer)
+                .typeOfBill(typeOfBill) // Assigned relational object node reference safely
+                .billDate(request.getBillDate())
+                .lrNumber(request.getLrNumber() != null ? request.getLrNumber().trim() : null)
+                .lrDate(request.getLrDate() != null ? request.getLrDate().trim() : null)
+                .transporterName(request.getTransporterName() != null ? request.getTransporterName().trim() : null)
+                .vehicleNumber(request.getVehicleNumber() != null ? request.getVehicleNumber().trim().toUpperCase() : null)
+                .ewayBillNumber(request.getEwayBillNumber() != null ? request.getEwayBillNumber().trim() : null)
+                .eInvoiceNumber(request.getEInvoiceNumber() != null ? request.getEInvoiceNumber().trim() : null)
                 .discountType(request.getDiscountType())
                 .discountRate(request.getDiscountRate())
                 .taxType(request.getTaxType())
@@ -61,10 +75,23 @@ public class SalesBillService {
         Customer customer = customerRepository.findById(request.getCustomerId())
                 .orElseThrow(() -> new ResourceNotFoundException("Customer not found."));
 
+        TypeOfBill typeOfBill = typeOfBillRepository.findById(request.getTypeOfBillId())
+                .orElseThrow(() -> new ResourceNotFoundException("Bill Type mapping not discovered."));
+
         existingBill.getItems().forEach(item -> item.getBundle().setSold(false));
         existingBill.getItems().clear();
 
         existingBill.setCustomer(customer);
+        existingBill.setTypeOfBill(typeOfBill); // Re-mapped active row pointer reference
+        existingBill.setBillDate(request.getBillDate());
+
+        existingBill.setLrNumber(request.getLrNumber());
+        existingBill.setLrDate(request.getLrDate());
+        existingBill.setTransporterName(request.getTransporterName());
+        existingBill.setVehicleNumber(request.getVehicleNumber() != null ? request.getVehicleNumber().toUpperCase() : null);
+        existingBill.setEwayBillNumber(request.getEwayBillNumber());
+        existingBill.setEInvoiceNumber(request.getEInvoiceNumber());
+
         existingBill.setDiscountType(request.getDiscountType());
         existingBill.setDiscountRate(request.getDiscountRate());
         existingBill.setTaxType(request.getTaxType());
@@ -120,7 +147,6 @@ public class SalesBillService {
             salesBill.addItem(billItem);
             runningSubtotal = runningSubtotal.add(bundleTotalValue);
         }
-
         salesBill.setSubtotalAmount(runningSubtotal);
 
         // Calculate discount deductions
@@ -146,7 +172,6 @@ public class SalesBillService {
         return bill.getItems().stream().anyMatch(item -> item.getBundle().getId().equals(bundle.getId()));
     }
 
-
     @Transactional(readOnly = true)
     public SalesBillResponseDTO getBillByCombinedSearch(String combinedSearch) {
         if (!combinedSearch.startsWith("BILL-")) {
@@ -169,7 +194,6 @@ public class SalesBillService {
     @Transactional(readOnly = true) public List<SalesBillResponseDTO> getAllBills() { return salesBillRepository.findAll().stream().map(salesBillMapper::toResponseDto).toList(); }
     @Transactional public void deleteBill(Long id) { SalesBill bill = salesBillRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Bill not found")); bill.getItems().forEach(item -> item.getBundle().setSold(false)); salesBillRepository.delete(bill); }
 
-
     @Transactional(readOnly = true)
     public Page<SalesBillResponseDTO> getAllBillsPaged(Specification<SalesBill> spec, Pageable pageable) {
         return salesBillRepository.findAll(spec, pageable).map(salesBillMapper::toResponseDto);
@@ -177,25 +201,32 @@ public class SalesBillService {
 
     @Transactional(readOnly = true)
     public SalesBillResponseDTO previewBill(SalesBillRequestDTO request) {
-        // Mock a provisional bill identifier for display purposes
         String provisionalFY = FinancialYearUtil.getCurrentFinancialYear();
 
         Customer customer = customerRepository.findById(request.getCustomerId())
                 .orElseThrow(() -> new ResourceNotFoundException("Customer context missing for preview."));
 
+        TypeOfBill typeOfBill = typeOfBillRepository.findById(request.getTypeOfBillId())
+                .orElseThrow(() -> new ResourceNotFoundException("Bill Type record missing."));
+
         SalesBill previewBill = SalesBill.builder()
                 .billNumber("PREVIEW")
                 .financialYear(provisionalFY)
                 .customer(customer)
+                .typeOfBill(typeOfBill)
+                .lrNumber(request.getLrNumber())
+                .lrDate(request.getLrDate())
+                .transporterName(request.getTransporterName())
+                .vehicleNumber(request.getVehicleNumber())
+                .ewayBillNumber(request.getEwayBillNumber())
+                .eInvoiceNumber(request.getEInvoiceNumber())
                 .discountType(request.getDiscountType())
                 .discountRate(request.getDiscountRate())
                 .taxType(request.getTaxType())
                 .taxRate(request.getTaxRate())
                 .build();
 
-        // Architectural Win: Execute calculation logic without saving or altering bundle "isSold" state in DB
         calculatePreviewTotals(previewBill, request.getBundleNumbers());
-
         return salesBillMapper.toResponseDto(previewBill);
     }
 

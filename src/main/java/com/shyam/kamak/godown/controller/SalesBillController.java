@@ -73,17 +73,45 @@ public class SalesBillController {
             @RequestParam(required = false) String id,
             @RequestParam(required = false) String billNumber,
             @RequestParam(required = false) String financialYear,
-            @RequestParam(required = false) String customerName, // Matches column mapping key from frontend grid
-            @RequestParam(required = false) String grandTotal) {
+            @RequestParam(required = false) String customerName,
+            @RequestParam(required = false) String grandTotal,
+            // ➕ APPEND NEW QUERY ARGS CAPTURED FROM AG GRID CONTROLS
+            @RequestParam(required = false) String billDate,
+            @RequestParam(required = false) String lrNumber,
+            @RequestParam(required = false) String transporterName,
+            @RequestParam(required = false) String vehicleNumber,
+            @RequestParam(required = false) String typeOfBillName) {
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
 
+        // Passed clean variables straight into your refactored specification builder
         Specification<SalesBill> spec = SalesBillSpecification.getDynamicSearchCriteria(
-                search, id, billNumber, financialYear, customerName, grandTotal
+                search, id, billNumber, financialYear, customerName, grandTotal,
+                billDate, lrNumber, transporterName, vehicleNumber, typeOfBillName
         );
 
         return ResponseEntity.ok(salesBillService.getAllBillsPaged(spec, pageable));
     }
+
+//    @GetMapping("/paged")
+//    public ResponseEntity<Page<SalesBillResponseDTO>> getPagedSalesBills(
+//            @RequestParam(defaultValue = "0") int page,
+//            @RequestParam(defaultValue = "20") int size,
+//            @RequestParam(required = false) String search,
+//            @RequestParam(required = false) String id,
+//            @RequestParam(required = false) String billNumber,
+//            @RequestParam(required = false) String financialYear,
+//            @RequestParam(required = false) String customerName, // Matches column mapping key from frontend grid
+//            @RequestParam(required = false) String grandTotal) {
+//
+//        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+//
+//        Specification<SalesBill> spec = SalesBillSpecification.getDynamicSearchCriteria(
+//                search, id, billNumber, financialYear, customerName, grandTotal
+//        );
+//
+//        return ResponseEntity.ok(salesBillService.getAllBillsPaged(spec, pageable));
+//    }
 }
 //@RestController
 //@RequestMapping("/api/v1/sales-bills")
