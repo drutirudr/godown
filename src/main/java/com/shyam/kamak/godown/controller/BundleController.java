@@ -8,21 +8,19 @@ import com.shyam.kamak.godown.specification.BundleSpecification;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.*;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
 import java.util.List;
 
-@Slf4j
 @RestController
 @RequestMapping("/api/v1/bundles")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*") // Update with specific React domain in production
 public class BundleController {
 
     private final BundleService bundleService;
@@ -59,67 +57,44 @@ public class BundleController {
         return ResponseEntity.ok(bundleService.getSearchAvailableBundles(query));
     }
 
+    /**
+     * 🚀 FIXED ENDPOINT FOR INFINITE SCROLL AG GRID
+     * Completely removes old, direct specification calls that caused compilation failures.
+     * Integrates directly with the multi-tab rolling data horizon architecture.
+     */
     @GetMapping("/paged")
-    public ResponseEntity<Page<BundleResponseDTO>> getPagedBundles(
+    public ResponseEntity<Slice<BundleResponseDTO>> getPagedBundles(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "AVAILABLE") String tabViewMode,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String id,
             @RequestParam(required = false) String bundleNumber,
-            @RequestParam(required = false) String financialYear,
             @RequestParam(required = false) String manufacturerCode,
-            @RequestParam(required = false) String sold) {
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
 
-        Specification<Bundle> spec = BundleSpecification.getDynamicSearchCriteria(
-                search, id, bundleNumber, financialYear, manufacturerCode, sold
+        // Slice handles millions of records smoothly by omitting the COUNT(*) query
+        Slice<BundleResponseDTO> resultSlice = bundleService.searchBundlesPartitioned(
+                tabViewMode, search, id, bundleNumber, manufacturerCode, startDate, endDate, pageable
         );
 
-        return ResponseEntity.ok(bundleService.getAllBundlesPaged(spec, pageable));
+        return ResponseEntity.ok(resultSlice);
     }
-
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteBundle(@PathVariable Long id) {
         bundleService.deleteBundle(id);
         return ResponseEntity.noContent().build();
     }
+
+    @GetMapping("/next-number")
+    public ResponseEntity<String> getNextAvailableBundleNumber(@RequestParam String date) {
+        // 🚀 Reads cleanly from the tracker table without applying any row locks
+        String previewNumber = bundleService.getPreviewSequenceNumber(date);
+        return ResponseEntity.ok(previewNumber);
+    }
+
 }
-//@RestController
-//@RequestMapping("/api/v1/bundles")
-//@RequiredArgsConstructor
-//@CrossOrigin(origins = "*")
-//public class BundleController {
-//    private final BundleService bundleService;
-//
-//    @PostMapping
-//    public ResponseEntity<Bundle> createBundle(@RequestBody BundleRequestDTO dto) {
-//        return ResponseEntity.ok(bundleService.createBundle(dto));
-//    }
-//
-//    @PutMapping("/{id}")
-//    public ResponseEntity<Bundle> updateBundle(@PathVariable Long id, @RequestBody BundleRequestDTO dto) {
-//        return ResponseEntity.ok(bundleService.updateBundle(id, dto));
-//    }
-//
-//    @GetMapping("/{id}")
-//    public ResponseEntity<Bundle> getBundle(@PathVariable Long id) {
-//        return ResponseEntity.ok(bundleService.getBundleById(id));
-//    }
-//
-//    @GetMapping
-//    public ResponseEntity<List<Bundle>> getAllBundles() {
-//        return ResponseEntity.ok(bundleService.getAllBundles());
-//    }
-//
-//    @DeleteMapping("/{id}")
-//    public ResponseEntity<String> deleteBundle(@PathVariable Long id) {
-//        bundleService.deleteBundle(id);
-//        return ResponseEntity.ok("Bundle unit removed from master registry successfully.");
-//    }
-//
-////    @PostMapping public ResponseEntity<Bundle> create(@RequestBody BundleRequestDTO dto) { return ResponseEntity.ok(bundleService.createBundle(dto)); }
-////    @GetMapping public ResponseEntity<List<Bundle>> getAll() { return ResponseEntity.ok(bundleService.getAllBundles()); }
-//
-//}

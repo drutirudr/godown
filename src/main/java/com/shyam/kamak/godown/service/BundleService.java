@@ -3,20 +3,21 @@ package com.shyam.kamak.godown.service;
 import com.shyam.kamak.godown.dto.BundleItemRequestDTO;
 import com.shyam.kamak.godown.dto.BundleRequestDTO;
 import com.shyam.kamak.godown.dto.BundleResponseDTO;
-import com.shyam.kamak.godown.dto.FabricResponseDTO;
 import com.shyam.kamak.godown.exception.ResourceNotFoundException;
 import com.shyam.kamak.godown.mapper.BundleMapper;
 import com.shyam.kamak.godown.model.Bundle;
 import com.shyam.kamak.godown.model.BundleItem;
 import com.shyam.kamak.godown.model.Fabric;
+import com.shyam.kamak.godown.model.GlobalSequence;
 import com.shyam.kamak.godown.repository.BundleRepository;
 import com.shyam.kamak.godown.repository.FabricRepository;
+import com.shyam.kamak.godown.repository.GlobalSequenceRepository;
+import com.shyam.kamak.godown.specification.BundleSpecification;
 import com.shyam.kamak.godown.util.FinancialYearUtil;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.*;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,10 +25,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class BundleService {
@@ -35,26 +37,73 @@ public class BundleService {
     private final BundleRepository bundleRepository;
     private final FabricRepository fabricRepository;
     private final BundleMapper bundleMapper;
+    private final GlobalSequenceRepository globalSequenceRepository;
+
+    @Value("${godown.data-horizon.years:5}")
+    private int dataHorizonYears;
+
+    @Value("${godown.data-horizon.archive-years:2}")
+    private int archiveHorizonYears;
+
+    // =========================================================================
+    // 🚀 SECTION 1: SEQUENTIAL BUNDLE NUMBER TRACKER ACTIONS (NON-BLOCKING)
+    // =========================================================================
+
+    @Transactional(readOnly = true)
+    public String getPreviewSequenceNumber(String dateStr) {
+        LocalDate targetDate = Optional.ofNullable(parseLocalDateSafely(dateStr)).orElseGet(LocalDate::now);
+        String currentFY = deriveFinancialYearToken(targetDate);
+
+        // Read running metrics safely without any row blocking or pessimistic locks
+        int nextNumber = globalSequenceRepository.findById("BUNDLE")
+                .map(seq -> seq.getFinancialYear().equalsIgnoreCase(currentFY) ? seq.getRunningNumber() + 1 : 1)
+                .orElse(1);
+
+        //return formatBundleNumberString(targetDate, nextNumber);
+        return "BUN-" + currentFY + "-" + nextNumber;
+    }
+
+    @Transactional
+    public String generateNextSequentialBundleNumber(LocalDate targetDate) {
+        String currentFY = deriveFinancialYearToken(targetDate);
+
+        // 🛡️ Pessimistic FOR UPDATE lock applied cleanly inside a microsecond commit phase
+        GlobalSequence seq = globalSequenceRepository.findAndLockByEntityName("BUNDLE")
+                .orElseGet(() -> new GlobalSequence("BUNDLE", currentFY, 0));
+
+        if (!seq.getFinancialYear().equalsIgnoreCase(currentFY)) {
+            seq.setFinancialYear(currentFY);
+            seq.setRunningNumber(1);
+        } else {
+            seq.setRunningNumber(seq.getRunningNumber() + 1);
+        }
+        globalSequenceRepository.save(seq);
+
+        //return formatBundleNumberString(targetDate, seq.getRunningNumber());
+        return "BUN-" + currentFY + "-" + seq.getRunningNumber();
+    }
+
+    public String getNextAvailableBundleNumber(String dateStr) {
+        return getPreviewSequenceNumber(dateStr); // 🚀 Safely routed to non-blocking lookup handler
+    }
+
+    // =========================================================================
+    // 📦 SECTION 2: CORE CRUD READ/WRITE CORE SERVICE LIFECYCLES
+    // =========================================================================
 
     @Transactional
     public BundleResponseDTO createBundle(BundleRequestDTO request) {
-        String currentFY = FinancialYearUtil.getCurrentFinancialYear();
-        String bundleNumber = generateNextSequentialBundleNumber(currentFY);
+        // Compute and lock sequence code sequentially right during database persistence
+        String officialBundleNumber = generateNextSequentialBundleNumber(request.getBundleDate());
 
         Bundle bundle = Bundle.builder()
-                .bundleNumber(bundleNumber)
-                .financialYear(currentFY)
+                .bundleNumber(officialBundleNumber)
+                .bundleDate(request.getBundleDate())
                 .manufacturerCode(request.getManufacturerCode())
                 .sold(false)
                 .build();
 
-        Map<Long, Fabric> fabricMap = fetchFabricsForRequest(request.getItems());
-
-        for (BundleItemRequestDTO itemDto : request.getItems()) {
-            Fabric fabric = getFabricOrThrow(fabricMap, itemDto.getFabricId());
-            bundle.addItem(buildNewBundleItem(itemDto, fabric));
-        }
-
+        mapAndAttachRequestItems(bundle, request.getItems());
         return bundleMapper.toResponseDto(bundleRepository.save(bundle));
     }
 
@@ -65,51 +114,169 @@ public class BundleService {
 
         validateBundleIsEditable(existingBundle);
 
-        // Update root attribute cleanly
+        existingBundle.setBundleDate(request.getBundleDate());
         existingBundle.setManufacturerCode(request.getManufacturerCode());
 
-        // Batch load all required fabrics to avoid N+1 queries
-        Map<Long, Fabric> fabricMap = fetchFabricsForRequest(request.getItems());
+        // Sync and reconcile child collections cleanly
+        reconcileBundleItemsCollection(existingBundle, request.getItems());
 
-        // --- FIXED SYNCHRONIZATION VIA NATURAL KEY (fabricId + color) ---
+        return bundleMapper.toResponseDto(bundleRepository.save(existingBundle));
+    }
 
-        // 1. Map current items using natural business keys for reliable tracking
-        Map<String, BundleItem> currentItemsMap = existingBundle.getItems().stream()
+    @Transactional(readOnly = true)
+    public BundleResponseDTO getBundleById(Long id) {
+        return bundleRepository.findById(id)
+                .map(bundleMapper::toResponseDto)
+                .orElseThrow(() -> new ResourceNotFoundException("Bundle not found with id: " + id));
+    }
+
+    @Transactional(readOnly = true)
+    public List<BundleResponseDTO> getAllBundles() {
+        return bundleRepository.findAll().stream().map(bundleMapper::toResponseDto).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<BundleResponseDTO> getAllBundlesAvailable() {
+        return bundleRepository.findBySoldFalse().stream().map(bundleMapper::toResponseDto).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<BundleResponseDTO> getSearchAvailableBundles(String query) {
+        Pageable topTenLimit = PageRequest.of(0, 10, Sort.by("bundleNumber").ascending());
+        return bundleRepository.findBySoldFalseAndBundleNumberContainingIgnoreCase(query, topTenLimit)
+                .getContent().stream().map(bundleMapper::toResponseDto).toList();
+    }
+
+    @Transactional
+    public void deleteBundle(Long id) {
+        Bundle bundle = bundleRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Bundle not found with id: " + id));
+        validateBundleIsEditable(bundle);
+        bundleRepository.delete(bundle);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<BundleResponseDTO> getAllBundlesPaged(Specification<Bundle> spec, Pageable pageable) {
+        return bundleRepository.findAll(spec, pageable).map(bundleMapper::toResponseDto);
+    }
+
+    @Transactional(readOnly = true)
+    public Slice<BundleResponseDTO> searchBundlesPartitioned(
+            String tabViewMode, String search, String id, String bundleNumber, String manufacturerCode,
+            String startDateStr, String endDateStr, Pageable pageable) {
+
+        String cleanSearch = cleanStringInput(search);
+        String cleanId = cleanStringInput(id);
+        String cleanBundleNumber = cleanStringInput(bundleNumber);
+        String cleanManufacturerCode = cleanStringInput(manufacturerCode);
+
+        Boolean soldFilter = null;
+        LocalDate finalStartDate = parseLocalDateSafely(startDateStr);
+        LocalDate finalEndDate = parseLocalDateSafely(endDateStr);
+
+        // Collapse conditional parameters safely
+        if ("AVAILABLE".equalsIgnoreCase(tabViewMode)) {
+            soldFilter = false;
+            if (finalStartDate == null) finalStartDate = LocalDate.now().minusYears(dataHorizonYears);
+            if (finalEndDate == null) finalEndDate = LocalDate.now().plusYears(1);
+        } else if ("SOLD".equalsIgnoreCase(tabViewMode)) {
+            soldFilter = true;
+            if (finalStartDate == null) finalStartDate = LocalDate.now().minusYears(dataHorizonYears);
+            if (finalEndDate == null) finalEndDate = LocalDate.now().plusDays(1);
+        } else if ("ALL".equalsIgnoreCase(tabViewMode)) {
+            if (finalStartDate == null && finalEndDate == null && cleanSearch == null) {
+                finalStartDate = LocalDate.now().minusYears(archiveHorizonYears);
+                finalEndDate = LocalDate.now().plusYears(1);
+            }
+        }
+
+        if (finalStartDate != null && finalEndDate != null && finalStartDate.isAfter(finalEndDate)) {
+            LocalDate temp = finalStartDate;
+            finalStartDate = finalEndDate;
+            finalEndDate = temp;
+        }
+
+        log.info("============== 🚀 CRITERIA PRE-FLIGHT LOG =============");
+        log.info("Tab Mode       : {}", tabViewMode);
+        log.info("Global Search  : {}", cleanSearch);
+        log.info("Start Boundary : {}", finalStartDate);
+        log.info("End Boundary   : {}", finalEndDate);
+        log.info("========================================================");
+
+        Specification<Bundle> spec = BundleSpecification.getDynamicSearchCriteria(
+                cleanSearch, cleanId, cleanBundleNumber, cleanManufacturerCode, soldFilter, finalStartDate, finalEndDate
+        );
+
+        return bundleRepository.fetchSliceWithGraph(spec, pageable).map(bundleMapper::toResponseDto);
+    }
+
+    // =========================================================================
+    // 🛠️ SECTION 3: REUSABLE LOGICAL INTERNAL UTILITY HELPER METHODS
+    // =========================================================================
+
+    private String deriveFinancialYearToken(LocalDate targetDate) {
+        int year = targetDate.getYear();
+        int month = targetDate.getMonthValue();
+        int startYear = (month >= 4) ? year : year - 1;
+        return String.format("FY%02d-%02d", startYear % 100, (startYear + 1) % 100);
+    }
+
+//    private String formatBundleNumberString(LocalDate targetDate, int numericId) {
+//        String dateToken = String.format("%04d%02d%02d", targetDate.getYear(), targetDate.getMonthValue(), targetDate.getDayOfMonth());
+//        return "BUN-" + dateToken + "-" + numericId;
+//    }
+
+    private String cleanStringInput(String input) {
+        return (input != null && !input.trim().isEmpty()) ? input.trim() : null;
+    }
+
+    private void validateBundleIsEditable(Bundle bundle) {
+        if (bundle.isSold()) {
+            throw new IllegalStateException("Business Rule Violation: Sold bundles are permanently locked from modifications.");
+        }
+    }
+
+    private void mapAndAttachRequestItems(Bundle bundle, List<BundleItemRequestDTO> dtoList) {
+        Map<Long, Fabric> fabricMap = fetchFabricsForRequest(dtoList);
+        for (BundleItemRequestDTO dto : dtoList) {
+            Fabric fabric = getFabricOrThrow(fabricMap, dto.getFabricId());
+            bundle.addItem(buildNewBundleItem(dto, fabric));
+        }
+    }
+
+    private void reconcileBundleItemsCollection(Bundle bundle, List<BundleItemRequestDTO> incomingDtos) {
+        Map<Long, Fabric> fabricMap = fetchFabricsForRequest(incomingDtos);
+
+        Map<String, BundleItem> currentItemsMap = bundle.getItems().stream()
                 .collect(Collectors.toMap(
                         item -> item.getFabric().getId() + "_" + item.getColor().trim().toLowerCase(),
                         item -> item
                 ));
 
-        // 2. Map incoming payload signatures
-        Set<String> incomingSignatures = request.getItems().stream()
+        Set<String> incomingSignatures = incomingDtos.stream()
                 .map(dto -> dto.getFabricId() + "_" + dto.getColor().trim().toLowerCase())
                 .collect(Collectors.toSet());
 
-        // 3. Process Removals: Safe cascade drop items missing from the new selection layout
-        List<BundleItem> toRemove = existingBundle.getItems().stream()
+        // Perform differential item clearing
+        List<BundleItem> toRemove = bundle.getItems().stream()
                 .filter(item -> !incomingSignatures.contains(item.getFabric().getId() + "_" + item.getColor().trim().toLowerCase()))
                 .toList();
+        toRemove.forEach(bundle::removeItem);
 
-        toRemove.forEach(existingBundle::removeItem);
-
-        // 4. Process Additions or Updates seamlessly without breaking primary IDs
-        for (BundleItemRequestDTO dto : request.getItems()) {
+        // Perform upserts or append new nodes
+        for (BundleItemRequestDTO dto : incomingDtos) {
             String signature = dto.getFabricId() + "_" + dto.getColor().trim().toLowerCase();
             Fabric fabric = getFabricOrThrow(fabricMap, dto.getFabricId());
 
             if (currentItemsMap.containsKey(signature)) {
-                // UPDATE IN-PLACE: Modifies properties of existing item; database primary ID is completely preserved!
                 BundleItem existingItem = currentItemsMap.get(signature);
                 existingItem.setNumberOfRolls(dto.getNumberOfRolls());
                 existingItem.setMetersPerRoll(dto.getMetersPerRoll());
                 existingItem.setFrozenCostPerMeter(fabric.getCurrentCostPerMeter());
             } else {
-                // INSERT: This is an entirely fresh line selection combination added to the bundle
-                existingBundle.addItem(buildNewBundleItem(dto, fabric));
+                bundle.addItem(buildNewBundleItem(dto, fabric));
             }
         }
-
-        return bundleMapper.toResponseDto(bundleRepository.save(existingBundle));
     }
 
     private BundleItem buildNewBundleItem(BundleItemRequestDTO dto, Fabric fabric) {
@@ -129,223 +296,21 @@ public class BundleService {
     }
 
     private Fabric getFabricOrThrow(Map<Long, Fabric> fabricMap, Long fabricId) {
-        if (!fabricMap.containsKey(fabricId)) {
+        Fabric fabric = fabricMap.get(fabricId);
+        if (fabric == null) {
             throw new ResourceNotFoundException("Fabric record context missing for ID: " + fabricId);
         }
-        return fabricMap.get(fabricId);
+        return fabric;
     }
 
-    private String generateNextSequentialBundleNumber(String financialYear) {
-        int nextId = bundleRepository.findMaxBundleNumberByFinancialYear(financialYear) + 1;
-        return String.format("%05d", nextId);
-    }
-
-    private void validateBundleIsEditable(Bundle bundle) {
-        if (bundle.isSold()) {
-            throw new IllegalStateException("Business Rule Violation: Sold bundles are permanently locked from modifications.");
+    private LocalDate parseLocalDateSafely(String dateStr) {
+        if (dateStr == null || dateStr.trim().isEmpty()) {
+            return null;
         }
-    }
-
-    @Transactional(readOnly = true)
-    public BundleResponseDTO getBundleById(Long id) {
-        return bundleRepository.findById(id)
-                .map(bundleMapper::toResponseDto)
-                .orElseThrow(() -> new ResourceNotFoundException("Bundle not found with id: " + id));
-    }
-
-
-    @Transactional(readOnly = true)
-    public List<BundleResponseDTO> getAllBundles() {
-        return bundleRepository.findAll().stream()
-                .map(bundleMapper::toResponseDto)
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public List<BundleResponseDTO> getAllBundlesAvailable() {
-        return bundleRepository.findBySoldFalse().stream()
-                .map(bundleMapper::toResponseDto)
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    public List<BundleResponseDTO> getSearchAvailableBundles(String query) {
-
-        // 1. Enforce a strict query limit size constraint at the database layer (Max 10 records)
-        Pageable topTenLimit = PageRequest.of(0, 10, Sort.by("bundleNumber").ascending());
-
-        // 2. Query only available matching packages
-        Page<Bundle> matchingBundles = bundleRepository.findBySoldFalseAndBundleNumberContainingIgnoreCase(query, topTenLimit);
-
-        // 3. Map values and stream results back to the client interface layer
-        List<BundleResponseDTO> responseList = matchingBundles.getContent().stream()
-                .map(bundleMapper::toResponseDto)
-                .toList();
-
-        return responseList;
-    }
-
-
-    @Transactional
-    public void deleteBundle(Long id) {
-        Bundle bundle = bundleRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Bundle not found with id: " + id));
-        validateBundleIsEditable(bundle);
-        bundleRepository.delete(bundle);
-    }
-
-    @Transactional(readOnly = true)
-    public Page<BundleResponseDTO> getAllBundlesPaged(Specification<Bundle> spec, Pageable pageable) {
-        return bundleRepository.findAll(spec, pageable).map(bundleMapper::toResponseDto);
-    }
-
-    private String calculateFinancialYear() {
-        LocalDate now = LocalDate.now();
-        int currentYear = now.getYear();
-        int month = now.getMonthValue();
-        if (month < 4) {
-            return "FY" + ((currentYear - 1) % 100) + "-" + (currentYear % 100);
-        } else {
-            return "FY" + (currentYear % 100) + "-" + ((currentYear + 1) % 100);
+        try {
+            return LocalDate.parse(dateStr.trim());
+        } catch (java.time.format.DateTimeParseException e) {
+            return null;
         }
     }
 }
-
-//import com.shyam.kamak.godown.dto.*;
-//import com.shyam.kamak.godown.mapper.BundleMapper;
-//import com.shyam.kamak.godown.model.*;
-//import com.shyam.kamak.godown.repository.*;
-//import com.shyam.kamak.godown.util.Utils;
-//import lombok.RequiredArgsConstructor;
-//import lombok.extern.slf4j.Slf4j;
-//import org.springframework.stereotype.Service;
-//import org.springframework.transaction.annotation.Transactional;
-//import java.util.List;
-//
-//@Slf4j
-//@Service
-//@RequiredArgsConstructor
-//public class BundleService {
-//    private final BundleRepository bundleRepository;
-//    private final FabricRepository fabricRepository;
-//    private final SequenceGeneratorService sequenceGeneratorService;
-//    private final BundleMapper bundleMapper;
-//
-////    @Transactional
-////    public Bundle createBundle(BundleRequestDTO dto) {
-////        Bundle bundle = new Bundle();
-////        String fy = FinancialYearUtil.getCurrentFinancialYear();
-////
-////        // Block Concurrent Overlaps via Lock synchronization logic
-//////        synchronized(this) {
-//////            Integer maxSeq = bundleRepository.findMaxSequenceByFinancialYear(fy);
-//////            bundle.setSequenceNumber(maxSeq + 1);
-//////        }
-////        String fy = FinancialYearUtil.getCurrentFinancialYear();
-////        Integer nextSeq = sequenceGeneratorService.getNextSequence("BUNDLE", fy);
-////        //bundle.setSequenceNumber(nextSeq);
-////
-////        bundle.setFinancialYear(fy);
-////
-////        //bundle.setBusinessBundleId("BNDL-" + fy + "-" + String.format("%04d", bundle.getSequenceNumber()));
-////        int primitiveSequenceValue = nextSeq.intValue(); // Force unboxing to primitive int
-////        bundle.setSequenceNumber(primitiveSequenceValue);
-////        bundle.setBusinessBundleId("BNDL-" + fy + "-" + String.format("%04d", primitiveSequenceValue));
-////
-////        bundle.setManufacturerCode(dto.getManufacturerCode());
-////        bundle.setStatus(BundleStatus.AVAILABLE);
-////
-////        for (BundleItemRequestDTO itemDto : dto.getItems()) {
-////            Fabric fabric = fabricRepository.findById(itemDto.getFabricId())
-////                    .orElseThrow(() -> new RuntimeException("Fabric profile not found"));
-////
-////            BundleItem item = new BundleItem();
-////            item.setFabric(fabric);
-////            item.setNumRolls(itemDto.getNumRolls());
-////            item.setMetersPerRoll(itemDto.getMetersPerRoll());
-////            item.setColor(itemDto.getColor());
-////            // CRITICAL AUDIT RULE: Capture current master price right now
-////            item.setSnapshotPricePerMeter(fabric.getCurrentPricePerMeter());
-////
-////            bundle.addBundleItem(item);
-////        }
-////        return bundleRepository.save(bundle);
-////    }
-//
-////    @Transactional(readOnly = true)
-////    public List<Bundle> getAllBundles() { return bundleRepository.findAll(); }
-//
-//    @Transactional(readOnly = true)
-//    public Bundle getBundleById(Long id) {
-//        return bundleRepository.findById(id).orElseThrow(() -> new RuntimeException("Bundle not found"));
-//    }
-//
-//    @Transactional
-//    public void deleteBundle(Long id) {
-//        Bundle bundle = getBundleById(id);
-//        if (bundle.getStatus() == BundleStatus.SOLD) {
-//            throw new IllegalStateException("Cannot delete a bundle that has already been billed and sold.");
-//        }
-//        bundleRepository.delete(bundle);
-//    }
-//
-//    @Transactional
-//    public Bundle createBundle(BundleRequestDTO dto) {
-//        Bundle bundle = new Bundle();
-//        String fy = Utils.getCurrentFinancialYear();
-//        Integer nextSeq = sequenceGeneratorService.getNextSequence("BUNDLE", fy);
-//
-//        bundle.setSequenceNumber(nextSeq);
-//        bundle.setFinancialYear(fy);
-//        bundle.setBusinessBundleId("BNDL-" + fy + "-" + String.format("%04d", nextSeq));
-//        bundle.setStatus(BundleStatus.AVAILABLE);
-//        bundle.setManufacturerCode(dto.manufacturerCode());
-//        // Map simple fields from DTO using mapper
-//        //bundleMapper.updateEntityFromDto(dto, bundle);
-//
-//        // Create and add bundle items with fabric references
-//        for (BundleItemRequestDTO itemDto : dto.items()) {
-//            Fabric fabric = fabricRepository.findById(itemDto.fabricId()).orElseThrow(() -> new RuntimeException("Fabric profile not found"));
-//            BundleItem item = new BundleItem();
-//            item.setFabric(fabric);
-//            item.setNumRolls(itemDto.numRolls());
-//            item.setMetersPerRoll(itemDto.metersPerRoll());
-//            item.setColor(itemDto.color());
-//            item.setSnapshotPricePerMeter(fabric.getCurrentPricePerMeter());
-//            bundle.addBundleItem(item);
-//        }
-//        return bundleRepository.save(bundle);
-//    }
-//
-//    @Transactional
-//    public Bundle updateBundle(Long id, BundleRequestDTO dto) {
-//        Bundle bundle = getBundleById(id);
-//
-//        if (bundle.getStatus() == BundleStatus.SOLD) {
-//            throw new IllegalStateException("Cannot update a bundle that has already been billed and sold.");
-//        }
-//
-//        // Let the mapper update simple mutable fields (mapper ignores bundleItems)
-//        bundleMapper.updateEntityFromDto(dto, bundle);
-//
-//        // Replace bundle items: clear existing (orphanRemoval will delete them) and add new ones
-//        bundle.getBundleItems().clear();
-//
-//        for (BundleItemRequestDTO itemDto : dto.items()) {
-//            Fabric fabric = fabricRepository.findById(itemDto.fabricId()).orElseThrow(() -> new RuntimeException("Fabric profile not found"));
-//            BundleItem item = new BundleItem();
-//            item.setFabric(fabric);
-//            item.setNumRolls(itemDto.numRolls());
-//            item.setMetersPerRoll(itemDto.metersPerRoll());
-//            item.setColor(itemDto.color());
-//            item.setSnapshotPricePerMeter(fabric.getCurrentPricePerMeter());
-//            bundle.addBundleItem(item);
-//        }
-//
-//        return bundleRepository.save(bundle);
-//    }
-//
-//    @Transactional(readOnly = true) public List<Bundle> getAllBundles() { return bundleRepository.findAll(); }
-//
-//
-//}

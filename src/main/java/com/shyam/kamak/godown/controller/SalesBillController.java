@@ -2,20 +2,20 @@ package com.shyam.kamak.godown.controller;
 
 import com.shyam.kamak.godown.dto.SalesBillRequestDTO;
 import com.shyam.kamak.godown.dto.SalesBillResponseDTO;
-import com.shyam.kamak.godown.model.SalesBill;
 import com.shyam.kamak.godown.service.SalesBillService;
-import com.shyam.kamak.godown.specification.SalesBillSpecification;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
 import java.util.List;
 
 @Slf4j
@@ -65,18 +65,25 @@ public class SalesBillController {
         return ResponseEntity.ok(salesBillService.previewBill(request));
     }
 
+    // 🚀 NEW NON-BLOCKING PREVIEW GATEWAY: Lets operators preview next bill numbers without applying heavy FOR UPDATE locks!
+    @GetMapping("/next-number")
+    public ResponseEntity<String> getNextAvailableBillNumber(@RequestParam String date) {
+        return ResponseEntity.ok(salesBillService.getPreviewSequenceNumber(date));
+    }
+
+    // 🚀 REFACTORED TO SLICE WINDOWS: Wipes out full table count scans across millions of rows permanently
     @GetMapping("/paged")
-    public ResponseEntity<Page<SalesBillResponseDTO>> getPagedSalesBills(
+    public ResponseEntity<Slice<SalesBillResponseDTO>> getPagedSalesBills(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "ACTIVE") String tabViewMode, // ACTIVE / HISTORICAL / ALL
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String id,
             @RequestParam(required = false) String billNumber,
-            @RequestParam(required = false) String financialYear,
             @RequestParam(required = false) String customerName,
             @RequestParam(required = false) String grandTotal,
-            // ➕ APPEND NEW QUERY ARGS CAPTURED FROM AG GRID CONTROLS
-            @RequestParam(required = false) String billDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(required = false) String lrNumber,
             @RequestParam(required = false) String transporterName,
             @RequestParam(required = false) String vehicleNumber,
@@ -84,87 +91,11 @@ public class SalesBillController {
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
 
-        // Passed clean variables straight into your refactored specification builder
-        Specification<SalesBill> spec = SalesBillSpecification.getDynamicSearchCriteria(
-                search, id, billNumber, financialYear, customerName, grandTotal,
-                billDate, lrNumber, transporterName, vehicleNumber, typeOfBillName
+        Slice<SalesBillResponseDTO> resultSlice = salesBillService.searchSalesBillsPartitioned(
+                tabViewMode, search, id, billNumber, customerName, grandTotal,
+                startDate, endDate, lrNumber, transporterName, vehicleNumber, typeOfBillName, pageable
         );
 
-        return ResponseEntity.ok(salesBillService.getAllBillsPaged(spec, pageable));
+        return ResponseEntity.ok(resultSlice);
     }
-
-//    @GetMapping("/paged")
-//    public ResponseEntity<Page<SalesBillResponseDTO>> getPagedSalesBills(
-//            @RequestParam(defaultValue = "0") int page,
-//            @RequestParam(defaultValue = "20") int size,
-//            @RequestParam(required = false) String search,
-//            @RequestParam(required = false) String id,
-//            @RequestParam(required = false) String billNumber,
-//            @RequestParam(required = false) String financialYear,
-//            @RequestParam(required = false) String customerName, // Matches column mapping key from frontend grid
-//            @RequestParam(required = false) String grandTotal) {
-//
-//        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
-//
-//        Specification<SalesBill> spec = SalesBillSpecification.getDynamicSearchCriteria(
-//                search, id, billNumber, financialYear, customerName, grandTotal
-//        );
-//
-//        return ResponseEntity.ok(salesBillService.getAllBillsPaged(spec, pageable));
-//    }
 }
-//@RestController
-//@RequestMapping("/api/v1/sales-bills")
-//@RequiredArgsConstructor
-//@CrossOrigin(origins = "*")
-//public class SalesBillController {
-//    private final SalesBillService salesBillService;
-//
-////
-//@PostMapping
-//public ResponseEntity<SalesBillResponseDTO> createBill(@RequestBody SalesBillRequestDTO dto) {
-//    return ResponseEntity.ok(salesBillService.createSalesBillDTO(dto));
-//}
-//
-//    @PutMapping("/{id}")
-//    public ResponseEntity<SalesBillResponseDTO> updateBill(@PathVariable Long id, @RequestBody SalesBillRequestDTO dto) {
-//        return ResponseEntity.ok(salesBillService.updateSalesBillDTO(id, dto));
-//    }
-//
-//    @GetMapping("/{id}")
-//    public ResponseEntity<SalesBillResponseDTO> getBill(@PathVariable Long id) {
-//        return ResponseEntity.ok(salesBillService.getBillByIdDTO(id));
-//    }
-//
-//
-//    @GetMapping
-//    public ResponseEntity<List<SalesBill>> getAllBills() {
-//        return ResponseEntity.ok(salesBillService.getAllBills());
-//    }
-//
-//    @DeleteMapping("/{id}")
-//    public ResponseEntity<String> deleteBill(@PathVariable Long id) {
-//        salesBillService.deleteSalesBill(id);
-//        return ResponseEntity.ok("Invoice record successfully removed. Linked stock components restored to stock registry.");
-//    }
-//
-////    @PostMapping public ResponseEntity<SalesBillResponseDTO> createBill(@RequestBody SalesBillRequestDTO dto) { return ResponseEntity.ok(mapToResponseDTO(salesBillService.createSalesBill(dto))); }
-////    @PutMapping("/{id}") public ResponseEntity<SalesBillResponseDTO> updateBill(@PathVariable Long id, @RequestBody SalesBillRequestDTO dto) { return ResponseEntity.ok(mapToResponseDTO(salesBillService.updateSalesBill(id, dto))); }
-////    @GetMapping("/{id}") public ResponseEntity<SalesBillResponseDTO> getBill(@PathVariable Long id) { return ResponseEntity.ok(mapToResponseDTO(salesBillService.getBillById(id))); }
-////    @DeleteMapping("/{id}") public ResponseEntity<String> deleteBill(@PathVariable Long id) { salesBillService.deleteSalesBill(id); return ResponseEntity.ok("Deleted successfully."); }
-//
-////    private SalesBillResponseDTO mapToResponseDTO(SalesBill bill) {
-////        SalesBillResponseDTO res = new SalesBillResponseDTO();
-////        res.setId(bill.getId()); res.setBusinessBillNumber(bill.getBusinessBillNumber()); res.setFinancialYear(bill.getFinancialYear()); res.setBillDate(bill.getBillDate()); res.setCustomerName(bill.getCustomer().getCustomerName()); res.setSubTotal(bill.getSubTotal()); res.setDiscountType(bill.getDiscountType()); res.setDiscountAmount(bill.getDiscountAmount()); res.setTaxType(bill.getTaxType()); res.setTaxAmount(bill.getTaxAmount()); res.setGrandTotal(bill.getGrandTotal());
-////        res.setItems(bill.getSalesBillItems().stream().map(item -> {
-////            SalesBillResponseDTO.BillItemDetailsDTO itemDto = new SalesBillResponseDTO.BillItemDetailsDTO();
-////            itemDto.setBusinessBundleId(item.getBundle().getBusinessBundleId());
-////            itemDto.setSnapshotTotalMeters(item.getSnapshotTotalMeters());
-////            itemDto.setSnapshotBundleSubtotal(item.getSnapshotBundleSubtotal());
-////            return itemDto;
-////        }).collect(Collectors.toList()));
-////        return res;
-////    }
-//}
-//
-//

@@ -9,7 +9,6 @@ import java.math.BigDecimal;
 @Data
 public class BundleItemRequestDTO {
 
-    // Nullable for new entries, provided for updating existing records
     private Long id;
 
     @NotNull(message = "Fabric ID is required")
@@ -26,11 +25,3 @@ public class BundleItemRequestDTO {
     @Min(value = 1, message = "Meters must be greater than 0")
     private BigDecimal metersPerRoll;
 }
-//import java.math.BigDecimal;
-//
-//public record BundleItemRequestDTO(
-//        Long fabricId,
-//        Integer numRolls,
-//        BigDecimal metersPerRoll,
-//        String color
-//) {}

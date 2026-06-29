@@ -1,6 +1,7 @@
 package com.shyam.kamak.godown.service;
 
-import com.shyam.kamak.godown.dto.FabricResponseDTO;
+import com.shyam.kamak.godown.components.BarcodeParsingEngine;
+import com.shyam.kamak.godown.components.SalesBillCalculationEngine;
 import com.shyam.kamak.godown.dto.SalesBillRequestDTO;
 import com.shyam.kamak.godown.dto.SalesBillResponseDTO;
 import com.shyam.kamak.godown.exception.ResourceNotFoundException;
@@ -10,19 +11,23 @@ import com.shyam.kamak.godown.repository.BundleRepository;
 import com.shyam.kamak.godown.repository.CustomerRepository;
 import com.shyam.kamak.godown.repository.SalesBillRepository;
 import com.shyam.kamak.godown.repository.TypeOfBillRepository;
-import com.shyam.kamak.godown.util.FinancialYearUtil;
+import com.shyam.kamak.godown.repository.GlobalSequenceRepository;
+import com.shyam.kamak.godown.specification.SalesBillSpecification;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SalesBillService {
@@ -30,40 +35,76 @@ public class SalesBillService {
     private final SalesBillRepository salesBillRepository;
     private final BundleRepository bundleRepository;
     private final CustomerRepository customerRepository;
-    private final SalesBillMapper salesBillMapper;
     private final TypeOfBillRepository typeOfBillRepository;
+    private final GlobalSequenceRepository globalSequenceRepository;
+    private final SalesBillMapper salesBillMapper;
+
+    private final BarcodeParsingEngine barcodeParser;
+    private final SalesBillCalculationEngine calculationEngine;
+
+    @Value("${godown.salesbill-horizon.years:5}")
+    private int salesBillHorizonYears;
+
+    @Value("${godown.salesbill-horizon.archive-years:2}")
+    private int archiveHorizonYears; // 🚀 New rolling 2-year boundary fallback config
+
+    // =========================================================================
+    // 🔍 SECTION 1: NON-BLOCKING SEQUENTIAL SERIAL INVOICE TRACKING CODES
+    // =========================================================================
+
+    private String deriveFinancialYearToken(LocalDate targetDate) {
+        int year = targetDate.getYear();
+        int month = targetDate.getMonthValue();
+        int startYear = (month >= 4) ? year : year - 1;
+        return String.format("FY%02d-%02d", startYear % 100, (startYear + 1) % 100);
+    }
+
+    @Transactional(readOnly = true)
+    public String getPreviewSequenceNumber(String dateStr) {
+        LocalDate targetDate = Optional.ofNullable(parseLocalDateSafely(dateStr)).orElseGet(LocalDate::now);
+        String currentFY = deriveFinancialYearToken(targetDate);
+
+        // Read tracker row cleanly from the database with ZERO row-level pessimistic locks
+        int nextNumber = globalSequenceRepository.findById("SALES_BILL")
+                .map(seq -> seq.getFinancialYear().equalsIgnoreCase(currentFY) ? seq.getRunningNumber() + 1 : 1)
+                .orElse(1);
+
+        return String.format("%05d", nextNumber);
+    }
+
+    @Transactional
+    public String generateNextSequentialBillNumber(LocalDate targetDate) {
+        String currentFY = deriveFinancialYearToken(targetDate);
+
+        // 🛡️ ATOMIC COMMIT WRITER: Locks the 'SALES_BILL' tracker row for a millisecond to prevent duplicates
+        GlobalSequence seq = globalSequenceRepository.findAndLockByEntityName("SALES_BILL")
+                .orElseGet(() -> new GlobalSequence("SALES_BILL", currentFY, 0));
+
+        if (!seq.getFinancialYear().equalsIgnoreCase(currentFY)) {
+            seq.setFinancialYear(currentFY);
+            seq.setRunningNumber(1);
+        } else {
+            seq.setRunningNumber(seq.getRunningNumber() + 1);
+        }
+        globalSequenceRepository.save(seq);
+
+        return String.format("%05d", seq.getRunningNumber());
+    }
+
+    // =========================================================================
+    // 📋 SECTION 2: OPERATIONS CORE MANAGEMENT ACTIONS
+    // =========================================================================
 
     @Transactional
     public SalesBillResponseDTO createBill(SalesBillRequestDTO request) {
-        String currentFY = FinancialYearUtil.getCurrentFinancialYear();
-        String billNumber = String.format("%05d", salesBillRepository.findMaxBillNumberByFinancialYear(currentFY) + 1);
+        // Compute and lock the official sequence bill number right inside the transactional write step
+        String officialBillNumber = generateNextSequentialBillNumber(request.getBillDate());
 
-        Customer customer = customerRepository.findById(request.getCustomerId())
-                .orElseThrow(() -> new ResourceNotFoundException("Customer record not found."));
+        validateUniqueBillNumberForFinancialYear(officialBillNumber, request.getBillDate(), null);
 
-        // 🛡️ LOOKUP LAYER ENFORCEMENT: Enforces validation of relational master row selections
-        TypeOfBill typeOfBill = typeOfBillRepository.findById(request.getTypeOfBillId())
-                .orElseThrow(() -> new ResourceNotFoundException("Selected Bill Type record not found in system registers."));
+        SalesBill salesBill = buildBaseSalesBill(request, officialBillNumber);
+        attachBundlesToBill(salesBill, request.getBundleNumbers(), false);
 
-        SalesBill salesBill = SalesBill.builder()
-                .billNumber(billNumber)
-                .financialYear(currentFY)
-                .customer(customer)
-                .typeOfBill(typeOfBill) // Assigned relational object node reference safely
-                .billDate(request.getBillDate())
-                .lrNumber(request.getLrNumber() != null ? request.getLrNumber().trim() : null)
-                .lrDate(request.getLrDate() != null ? request.getLrDate().trim() : null)
-                .transporterName(request.getTransporterName() != null ? request.getTransporterName().trim() : null)
-                .vehicleNumber(request.getVehicleNumber() != null ? request.getVehicleNumber().trim().toUpperCase() : null)
-                .ewayBillNumber(request.getEwayBillNumber() != null ? request.getEwayBillNumber().trim() : null)
-                .eInvoiceNumber(request.getEInvoiceNumber() != null ? request.getEInvoiceNumber().trim() : null)
-                .discountType(request.getDiscountType())
-                .discountRate(request.getDiscountRate())
-                .taxType(request.getTaxType())
-                .taxRate(request.getTaxRate())
-                .build();
-
-        processAndCalculateBill(salesBill, request.getBundleNumbers());
         return salesBillMapper.toResponseDto(salesBillRepository.save(salesBill));
     }
 
@@ -72,551 +113,191 @@ public class SalesBillService {
         SalesBill existingBill = salesBillRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Sales Bill not found with id: " + id));
 
-        Customer customer = customerRepository.findById(request.getCustomerId())
-                .orElseThrow(() -> new ResourceNotFoundException("Customer not found."));
+        // 🚀 EDIT MODE IS UNLOCKED HERE: bill numbers are safe and immutable, ensuring tracking consistency
+        validateUniqueBillNumberForFinancialYear(existingBill.getBillNumber(), request.getBillDate(), id);
 
-        TypeOfBill typeOfBill = typeOfBillRepository.findById(request.getTypeOfBillId())
-                .orElseThrow(() -> new ResourceNotFoundException("Bill Type mapping not discovered."));
-
+        // 1. Release old material bundles back into the available warehouse stock pool automatically
         existingBill.getItems().forEach(item -> item.getBundle().setSold(false));
         existingBill.getItems().clear();
 
-        existingBill.setCustomer(customer);
-        existingBill.setTypeOfBill(typeOfBill); // Re-mapped active row pointer reference
-        existingBill.setBillDate(request.getBillDate());
+        // 2. Synchronize modified invoice text inputs
+        updateBillMetadata(existingBill, request);
 
-        existingBill.setLrNumber(request.getLrNumber());
-        existingBill.setLrDate(request.getLrDate());
-        existingBill.setTransporterName(request.getTransporterName());
-        existingBill.setVehicleNumber(request.getVehicleNumber() != null ? request.getVehicleNumber().toUpperCase() : null);
-        existingBill.setEwayBillNumber(request.getEwayBillNumber());
-        existingBill.setEInvoiceNumber(request.getEInvoiceNumber());
+        // 3. Re-attach updated bundle arrays and flip their flags back to sold = true automatically
+        existingBill.setId(null);
+        attachBundlesToBill(existingBill, request.getBundleNumbers(), false);
 
-        existingBill.setDiscountType(request.getDiscountType());
-        existingBill.setDiscountRate(request.getDiscountRate());
-        existingBill.setTaxType(request.getTaxType());
-        existingBill.setTaxRate(request.getTaxRate());
+        existingBill.setId(id); // Restore primary key mapping before transaction commit
 
-        processAndCalculateBill(existingBill, request.getBundleNumbers());
         return salesBillMapper.toResponseDto(salesBillRepository.save(existingBill));
     }
 
-    private void processAndCalculateBill(SalesBill salesBill, Set<String> bundleNumbers) {
-        BigDecimal runningSubtotal = BigDecimal.ZERO;
-
-        for (String combinedBarcode : bundleNumbers) {
-            String[] parts = combinedBarcode.trim().split("-(?=[^-]*$)");
-            if (parts.length < 2) {
-                throw new IllegalArgumentException("Invalid barcode mapping format. Expected: FYXX-XX-NNNNN");
-            }
-            String financialYear = parts[0];
-            String bundleNumber = parts[1];
-
-            Bundle bundle = bundleRepository.findByBundleNumberAndFinancialYear(bundleNumber, financialYear)
-                    .orElseThrow(() -> new ResourceNotFoundException("Bundle missing: " + combinedBarcode));
-
-            if (bundle.isSold() && !isBundleLinkedToThisBill(salesBill, bundle)) {
-                throw new IllegalStateException("Bundle " + combinedBarcode + " is already attached to another invoice.");
-            }
-
-            bundle.setSold(true);
-
-            // 1. Calculate row aggregates for rolls and meters natively using Java streams
-            int bundleTotalRolls = bundle.getItems().stream()
-                    .mapToInt(item -> item.getNumberOfRolls())
-                    .sum();
-
-            BigDecimal bundleTotalMeters = bundle.getItems().stream()
-                    .map(item -> BigDecimal.valueOf(item.getNumberOfRolls()).multiply(item.getMetersPerRoll()))
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-            // 2. Compute dynamic line value utilizing frozen cost configurations
-            BigDecimal bundleTotalValue = bundle.getItems().stream()
-                    .map(item -> BigDecimal.valueOf(item.getNumberOfRolls())
-                            .multiply(item.getMetersPerRoll())
-                            .multiply(item.getFrozenCostPerMeter()))
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-            SalesBillItem billItem = SalesBillItem.builder()
-                    .bundle(bundle)
-                    .totalRolls(bundleTotalRolls)       // Saved directly to the database
-                    .totalMeters(bundleTotalMeters)     // Saved directly to the database
-                    .subtotal(bundleTotalValue)
-                    .build();
-
-            salesBill.addItem(billItem);
-            runningSubtotal = runningSubtotal.add(bundleTotalValue);
-        }
-        salesBill.setSubtotalAmount(runningSubtotal);
-
-        // Calculate discount deductions
-        BigDecimal discountAmount = salesBill.getDiscountType() == SalesBill.CalculationType.PERCENT
-                ? runningSubtotal.multiply(salesBill.getDiscountRate()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
-                : salesBill.getDiscountRate();
-        salesBill.setDiscountAmount(discountAmount);
-
-        BigDecimal netAfterDiscount = runningSubtotal.subtract(discountAmount);
-        if (netAfterDiscount.compareTo(BigDecimal.ZERO) < 0) netAfterDiscount = BigDecimal.ZERO;
-
-        // Calculate tax additions
-        BigDecimal taxAmount = salesBill.getTaxType() == SalesBill.CalculationType.PERCENT
-                ? netAfterDiscount.multiply(salesBill.getTaxRate()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
-                : salesBill.getTaxRate();
-        salesBill.setTaxAmount(taxAmount);
-
-        salesBill.setGrandTotal(netAfterDiscount.add(taxAmount));
-    }
-
-    private boolean isBundleLinkedToThisBill(SalesBill bill, Bundle bundle) {
-        if (bill.getId() == null) return false;
-        return bill.getItems().stream().anyMatch(item -> item.getBundle().getId().equals(bundle.getId()));
+    @Transactional(readOnly = true)
+    public SalesBillResponseDTO previewBill(SalesBillRequestDTO request) {
+        SalesBill previewBill = buildBaseSalesBill(request, "PREVIEW");
+        attachBundlesToBill(previewBill, request.getBundleNumbers(), true);
+        return salesBillMapper.toResponseDto(previewBill);
     }
 
     @Transactional(readOnly = true)
     public SalesBillResponseDTO getBillByCombinedSearch(String combinedSearch) {
         if (!combinedSearch.startsWith("BILL-")) {
-            throw new IllegalArgumentException("Search string identifier must commence with 'BILL-' prefix layout.");
+            throw new IllegalArgumentException("Search identifier layout must commence with 'BILL-' prefix.");
         }
+
         String scope = combinedSearch.substring(5);
-        String[] parts = scope.split("-(?=[^-]*$)");
-        if (parts.length < 2) throw new IllegalArgumentException("Invalid layout format configuration segments.");
+        String[] parts = barcodeParser.splitBarcode(scope);
 
-        // FIX: Added correct array indexing [0] and [1]
         String billNumber = parts[0];
-        String financialYear = parts[1];
+        String financialYearStr = parts[1];
 
-        return salesBillRepository.findByBillNumberAndFinancialYear(billNumber, financialYear)
+        LocalDate[] bounds = barcodeParser.extractDatesFromFinancialYearString(financialYearStr);
+
+        return salesBillRepository.findDuplicateInFinancialYear(billNumber, bounds[0], bounds[1])
                 .map(salesBillMapper::toResponseDto)
-                .orElseThrow(() -> new ResourceNotFoundException("Invoice bill not found: " + combinedSearch));
+                .orElseThrow(() -> new ResourceNotFoundException("Invoice bill record missing: " + combinedSearch));
     }
 
-    @Transactional(readOnly = true) public SalesBillResponseDTO getBillById(Long id) { return salesBillRepository.findById(id).map(salesBillMapper::toResponseDto).orElseThrow(() -> new ResourceNotFoundException("Bill not found")); }
-    @Transactional(readOnly = true) public List<SalesBillResponseDTO> getAllBills() { return salesBillRepository.findAll().stream().map(salesBillMapper::toResponseDto).toList(); }
-    @Transactional public void deleteBill(Long id) { SalesBill bill = salesBillRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Bill not found")); bill.getItems().forEach(item -> item.getBundle().setSold(false)); salesBillRepository.delete(bill); }
+    private void attachBundlesToBill(SalesBill salesBill, Set<String> bundleBarcodes, boolean isMockPreview) {
+        for (String barcode : bundleBarcodes) {
+            String[] parts = barcodeParser.splitBarcode(barcode);
+            LocalDate[] bounds = barcodeParser.extractDatesFromFinancialYearString(parts[0]);
 
-    @Transactional(readOnly = true)
-    public Page<SalesBillResponseDTO> getAllBillsPaged(Specification<SalesBill> spec, Pageable pageable) {
-        return salesBillRepository.findAll(spec, pageable).map(salesBillMapper::toResponseDto);
+            Bundle bundle = bundleRepository.findByBundleNumberAndDateRange(parts[1], bounds[0], bounds[1])
+                    .orElseThrow(() -> new ResourceNotFoundException("Bundle match failed for: " + barcode));
+
+            if (!isMockPreview) {
+                if (bundle.isSold() && !isBundleLinkedToThisBill(salesBill, bundle)) {
+                    throw new IllegalStateException("Bundle " + barcode + " is already attached to another invoice.");
+                }
+                bundle.setSold(true); // Automatically flips status to locked/sold on final checkout commits!
+            }
+
+            salesBill.addItem(calculationEngine.buildSalesBillItem(salesBill, bundle));
+        }
+        calculationEngine.applyFinancialCalculations(salesBill);
     }
 
-    @Transactional(readOnly = true)
-    public SalesBillResponseDTO previewBill(SalesBillRequestDTO request) {
-        String provisionalFY = FinancialYearUtil.getCurrentFinancialYear();
-
+    private SalesBill buildBaseSalesBill(SalesBillRequestDTO request, String billNumber) {
         Customer customer = customerRepository.findById(request.getCustomerId())
-                .orElseThrow(() -> new ResourceNotFoundException("Customer context missing for preview."));
-
+                .orElseThrow(() -> new ResourceNotFoundException("Customer record missing."));
         TypeOfBill typeOfBill = typeOfBillRepository.findById(request.getTypeOfBillId())
                 .orElseThrow(() -> new ResourceNotFoundException("Bill Type record missing."));
 
-        SalesBill previewBill = SalesBill.builder()
-                .billNumber("PREVIEW")
-                .financialYear(provisionalFY)
-                .customer(customer)
-                .typeOfBill(typeOfBill)
-                .lrNumber(request.getLrNumber())
-                .lrDate(request.getLrDate())
-                .transporterName(request.getTransporterName())
-                .vehicleNumber(request.getVehicleNumber())
-                .ewayBillNumber(request.getEwayBillNumber())
-                .eInvoiceNumber(request.getEInvoiceNumber())
-                .discountType(request.getDiscountType())
-                .discountRate(request.getDiscountRate())
-                .taxType(request.getTaxType())
-                .taxRate(request.getTaxRate())
-                .build();
-
-        calculatePreviewTotals(previewBill, request.getBundleNumbers());
-        return salesBillMapper.toResponseDto(previewBill);
+        SalesBill bill = SalesBill.builder().billNumber(billNumber).build();
+        updateBillMetadata(bill, request);
+        bill.setCustomer(customer);
+        bill.setTypeOfBill(typeOfBill);
+        return bill;
     }
 
-    private void calculatePreviewTotals(SalesBill salesBill, Set<String> bundleNumbers) {
-        BigDecimal runningSubtotal = BigDecimal.ZERO;
+    private void updateBillMetadata(SalesBill bill, SalesBillRequestDTO request) {
+        bill.setBillDate(request.getBillDate());
+        bill.setLrNumber(cleanInputString(request.getLrNumber()));
+        bill.setLrDate(cleanInputString(request.getLrDate()));
+        bill.setTransporterName(cleanInputString(request.getTransporterName()));
+        bill.setVehicleNumber(request.getVehicleNumber() != null ? request.getVehicleNumber().trim().toUpperCase() : null);
+        bill.setEwayBillNumber(cleanInputString(request.getEwayBillNumber()));
+        bill.setEInvoiceNumber(cleanInputString(request.getEInvoiceNumber()));
+        bill.setDiscountType(request.getDiscountType());
+        bill.setDiscountRate(request.getDiscountRate());
+        bill.setTaxType(request.getTaxType());
+        bill.setTaxRate(request.getTaxRate());
+    }
 
-        for (String combinedBarcode : bundleNumbers) {
-            String[] parts = combinedBarcode.trim().split("-(?=[^-]*$)");
-            if (parts.length < 2) {
-                throw new IllegalArgumentException("Invalid barcode format. Expected: FYXX-XX-NNNNN");
+    private String cleanInputString(String str) {
+        return (str != null && !str.trim().isEmpty()) ? str.trim() : null;
+    }
+
+    private void validateUniqueBillNumberForFinancialYear(String billNumber, LocalDate billDate, Long currentId) {
+        LocalDate[] bounds = barcodeParser.getFinancialYearBounds(billDate);
+        salesBillRepository.findDuplicateInFinancialYear(billNumber, bounds[0], bounds[1]).ifPresent(duplicate -> {
+            if (currentId == null || !duplicate.getId().equals(currentId)) {
+                throw new IllegalArgumentException(String.format("Invoice Bill Number '%s' already exists within this financial period.", billNumber));
             }
-            String financialYear = parts[0];
-            String bundleNumber = parts[1];
+        });
+    }
 
-            Bundle bundle = bundleRepository.findByBundleNumberAndFinancialYear(bundleNumber, financialYear)
-                    .orElseThrow(() -> new ResourceNotFoundException("Bundle missing: " + combinedBarcode));
+    private boolean isBundleLinkedToThisBill(SalesBill bill, Bundle bundle) {
+        return bill.getId() != null && bill.getItems().stream().anyMatch(item -> item.getBundle().getId().equals(bundle.getId()));
+    }
 
-            // CRITICAL ARCHITECTURAL DIFFERENCE:
-            // We omit the bundle.setSold(true) check here because this is a non-binding mock preview calculation.
+    @Transactional(readOnly = true)
+    public SalesBillResponseDTO getBillById(Long id) {
+        return salesBillRepository.findWithDetailsById(id).map(salesBillMapper::toResponseDto)
+                .orElseThrow(() -> new ResourceNotFoundException("Invoice not found."));
+    }
 
-            int bundleTotalRolls = bundle.getItems().stream().mapToInt(BundleItem::getNumberOfRolls).sum();
-            BigDecimal bundleTotalMeters = bundle.getItems().stream()
-                    .map(item -> BigDecimal.valueOf(item.getNumberOfRolls()).multiply(item.getMetersPerRoll()))
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+    @Transactional(readOnly = true)
+    public List<SalesBillResponseDTO> getAllBills() {
+        return salesBillRepository.findAll().stream().map(salesBillMapper::toResponseDto).toList();
+    }
 
-            BigDecimal bundleTotalValue = bundle.getItems().stream()
-                    .map(item -> BigDecimal.valueOf(item.getNumberOfRolls())
-                            .multiply(item.getMetersPerRoll())
-                            .multiply(item.getFrozenCostPerMeter()))
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+    @Transactional
+    public void deleteBill(Long id) {
+        SalesBill bill = salesBillRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Target missing."));
+        bill.getItems().forEach(item -> item.getBundle().setSold(false)); // Release bundles back into warehouse stock cleanly on invoice deletions
+        salesBillRepository.delete(bill);
+    }
 
-            SalesBillItem billItem = SalesBillItem.builder()
-                    .bundle(bundle)
-                    .totalRolls(bundleTotalRolls)
-                    .totalMeters(bundleTotalMeters)
-                    .subtotal(bundleTotalValue)
-                    .build();
+    // =========================================================================
+    // 📊 SECTION 3: ROLLING ARCHIVE SEARCH TIME HORIZON FILTER ENGINE
+    // =========================================================================
 
-            salesBill.addItem(billItem);
-            runningSubtotal = runningSubtotal.add(bundleTotalValue);
+    @Transactional(readOnly = true)
+    public Slice<SalesBillResponseDTO> searchSalesBillsPartitioned(
+            String tabViewMode, String search, String id, String billNumber, String customerName,
+            String grandTotal, LocalDate startDate, LocalDate endDate, String lrNumber,
+            String transporterName, String vehicleNumber, String typeOfBillName, Pageable pageable) {
+
+        String cleanSearch = cleanInputString(search);
+        LocalDate finalStartDate = startDate;
+        LocalDate finalEndDate = endDate;
+
+        if ("ACTIVE".equalsIgnoreCase(tabViewMode)) {
+            if (finalStartDate == null) finalStartDate = LocalDate.now().minusYears(salesBillHorizonYears);
+            if (finalEndDate == null) finalEndDate = LocalDate.now().plusYears(1);
+        }
+        // 🚀 THE 2-YEAR ARCHIVE LOCK FIXED: Restricts historical queries to look back exactly 2 years max automatically
+        else if ("HISTORICAL".equalsIgnoreCase(tabViewMode)) {
+            if (finalStartDate == null && finalEndDate == null && cleanSearch == null) {
+                finalStartDate = LocalDate.now().minusYears(archiveHorizonYears); // Logs look back exactly 2 years max
+                finalEndDate = LocalDate.now().minusYears(salesBillHorizonYears); // Bounded safely at the active edge boundary
+            }
+        }
+        else if ("ALL".equalsIgnoreCase(tabViewMode)) {
+            if (finalStartDate == null && finalEndDate == null && cleanSearch == null) {
+                finalStartDate = LocalDate.now().minusYears(archiveHorizonYears); // Logs look back exactly 2 years max
+                finalEndDate = LocalDate.now().plusYears(1);
+            }
         }
 
-        salesBill.setSubtotalAmount(runningSubtotal);
+        if (finalStartDate != null && finalEndDate != null && finalStartDate.isAfter(finalEndDate)) {
+            LocalDate temp = finalStartDate;
+            finalStartDate = finalEndDate;
+            finalEndDate = temp;
+        }
 
-        // Discount Engine Math
-        BigDecimal discountAmount = salesBill.getDiscountType() == SalesBill.CalculationType.PERCENT
-                ? runningSubtotal.multiply(salesBill.getDiscountRate()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
-                : salesBill.getDiscountRate();
-        salesBill.setDiscountAmount(discountAmount);
+        log.info("============== 🚀 SALES BILL PRE-FLIGHT LOG =============");
+        log.info("Partition Tab  : {}", tabViewMode);
+        log.info("Global Keyword : {}", cleanSearch);
+        log.info("Start Boundary : {}", finalStartDate);
+        log.info("End Boundary   : {}", finalEndDate);
+        log.info("========================================================");
 
-        BigDecimal netAfterDiscount = runningSubtotal.subtract(discountAmount);
-        if (netAfterDiscount.compareTo(BigDecimal.ZERO) < 0) netAfterDiscount = BigDecimal.ZERO;
+        Specification<SalesBill> spec = SalesBillSpecification.getDynamicSearchCriteria(
+                cleanSearch, id, billNumber, customerName, grandTotal, finalStartDate, finalEndDate,
+                lrNumber, transporterName, vehicleNumber, typeOfBillName
+        );
 
-        // Tax Engine Math
-        BigDecimal taxAmount = salesBill.getTaxType() == SalesBill.CalculationType.PERCENT
-                ? netAfterDiscount.multiply(salesBill.getTaxRate()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP)
-                : salesBill.getTaxRate();
-        salesBill.setTaxAmount(taxAmount);
+        // 🚀 Leverages your clean high-speed fetch graph method to query data slices instantly!
+        return salesBillRepository.fetchSliceWithGraph(spec, pageable).map(salesBillMapper::toResponseDto);
+    }
 
-        salesBill.setGrandTotal(netAfterDiscount.add(taxAmount));
+    private LocalDate parseLocalDateSafely(String dateStr) {
+        if (dateStr == null || dateStr.trim().isEmpty()) return null;
+        try { return LocalDate.parse(dateStr.trim()); } catch (Exception e) { return null; }
     }
 }
-//import com.shyam.kamak.godown.dto.SalesBillRequestDTO;
-//import com.shyam.kamak.godown.dto.SalesBillResponseDTO;
-//import com.shyam.kamak.godown.mapper.SalesBillMapper;
-//import com.shyam.kamak.godown.model.*;
-//import com.shyam.kamak.godown.repository.*;
-//import com.shyam.kamak.godown.util.Utils;
-//import lombok.RequiredArgsConstructor;
-//import org.springframework.stereotype.Service;
-//import org.springframework.transaction.annotation.Transactional;
-//import java.math.BigDecimal;
-//import java.math.RoundingMode;
-//import lombok.extern.slf4j.Slf4j;
-//import java.util.ArrayList;
-//import java.util.List;
-//import java.util.stream.Collectors;
-//
-//@Slf4j
-//@Service
-//@RequiredArgsConstructor
-//public class SalesBillService {
-//    private final SalesBillRepository salesBillRepository;
-//    private final CustomerRepository customerRepository;
-//    private final BundleRepository bundleRepository;
-//    private final SequenceGeneratorService sequenceGeneratorService;
-//    private final SalesBillMapper salesBillMapper;
-//
-//    @Transactional
-//    public SalesBill createSalesBill(SalesBillRequestDTO dto) {
-//        Customer customer = customerRepository.findById(dto.customerId())
-//                .orElseThrow(() -> new RuntimeException("Customer records match missing."));
-//
-//        SalesBill bill = new SalesBill();
-//        String fy = Utils.getCurrentFinancialYear();
-//        Integer nextSeq = sequenceGeneratorService.getNextSequence("BILL", fy);
-//
-//        bill.setFinancialYear(fy);
-//        bill.setBusinessBillNumber("INV-" + fy + "-" + String.format("%05d", nextSeq));
-//        bill.setBillSequenceNumber(nextSeq);
-//        bill.setCustomer(customer);
-//
-//        calculateAndPopulateBillDetails(bill, dto);
-//        return salesBillRepository.save(bill);
-//    }
-//
-//    @Transactional
-//    public SalesBill updateSalesBill(Long billId, SalesBillRequestDTO dto) {
-//        SalesBill existingBill = salesBillRepository.findById(billId)
-//                .orElseThrow(() -> new RuntimeException("Invoice summary not found"));
-//
-//        // FIX 1: Explicitly fetch and isolate bundles to avoid collection mutation exceptions
-//        List<Bundle> bundlesToRelease = new ArrayList<>();
-//        for (SalesBillItem item : existingBill.getSalesBillItems()) {
-//            Bundle b = item.getBundle();
-//            b.setStatus(BundleStatus.AVAILABLE);
-//            bundlesToRelease.add(b);
-//
-//            // FIX: Explicitly sever the relationship to prevent memory orphan leaks
-//            item.setSalesBill(null);
-//            item.setBundle(null);
-//        }
-//        bundleRepository.saveAll(bundlesToRelease);
-//
-//        // Clear and flush orphan rows to the database immediately before re-populating
-//        existingBill.getSalesBillItems().clear();
-//        //salesBillRepository.saveAndFlush(existingBill);
-//        // CRITICAL FIX: Flush the deletion and state updates to MySQL immediately.
-//        // This clears the dirty cache state, allowing previously selected bundles to be safely re-evaluated.
-//        salesBillRepository.saveAndFlush(existingBill);
-//        bundleRepository.flush();
-//
-//        // Step 3: Recompute calculations with safety safeguards
-//        calculateAndPopulateBillDetails(existingBill, dto);
-//
-//        return salesBillRepository.save(existingBill);
-//    }
-//
-//    private void calculateAndPopulateBillDetails(SalesBill bill, SalesBillRequestDTO dto) {
-//        if (dto.bundleIds() == null || dto.bundleIds().isEmpty()) {
-//            throw new IllegalArgumentException("Batch processing aborted: The requested billing bundle list cannot be null or empty.");
-//        }
-//
-//        List<Long> distinctBundleIds = dto.bundleIds().stream()
-//                .distinct()
-//                .collect(Collectors.toList());
-//        List<Bundle> bundles = bundleRepository.findAllById(distinctBundleIds);
-//        if(bundles.size() != distinctBundleIds.size()) {
-//            throw new IllegalArgumentException("Batch processing aborted: One or more bundle records do not exist in inventory registry.");
-//        }
-//
-//        List<SalesBillItem> billItems = new ArrayList<>();
-//        BigDecimal subTotal = BigDecimal.ZERO;
-//
-//        for (Bundle bundle : bundles) {
-////            // Allow update states if it's already bound to THIS bill, block if owned by another SOLD entry
-////            if (bundle.getStatus() == BundleStatus.SOLD && !isBundleLinkedToBill(bill, bundle.getId())) {
-////                throw new IllegalStateException("Process Failed: Bundle " + bundle.getBusinessBundleId() + " is currently locked into another invoice transaction.");
-////            }
-//            // Check availability - safe because our update workflow has already cleared and flushed old configurations
-//            if (bundle.getStatus() == BundleStatus.SOLD) {
-//                throw new IllegalStateException("Process Failed: Bundle " + bundle.getBusinessBundleId() + " is currently locked into another invoice transaction.");
-//            }
-//
-//            BigDecimal totalMeters = BigDecimal.ZERO;
-//            BigDecimal bundleSubTotal = BigDecimal.ZERO;
-//
-//            for (BundleItem item : bundle.getBundleItems()) {
-//                BigDecimal itemMeters = BigDecimal.valueOf(item.getNumRolls()).multiply(item.getMetersPerRoll());
-//                BigDecimal itemCost = itemMeters.multiply(item.getSnapshotPricePerMeter());
-//
-//                totalMeters = totalMeters.add(itemMeters);
-//                bundleSubTotal = bundleSubTotal.add(itemCost);
-//            }
-//
-//            SalesBillItem billItem = new SalesBillItem();
-//            billItem.setSalesBill(bill);
-//            billItem.setBundle(bundle);
-//            billItem.setSnapshotTotalMeters(totalMeters);
-//            billItem.setSnapshotBundleSubtotal(bundleSubTotal);
-//            billItems.add(billItem);
-//
-//            subTotal = subTotal.add(bundleSubTotal);
-//            bundle.setStatus(BundleStatus.SOLD);
-//        }
-//
-//        bill.setSalesBillItems(billItems);
-//        bill.setSubTotal(subTotal);
-//
-//        // FIX 3: Fixed non-terminating decimal precision expansion holes by adding scale explicit contexts
-////        bill.setDiscountType(dto.getDiscountType());
-////        // Safe conversion from native double to precise BigDecimal instance
-////        BigDecimal inputDiscountRate = BigDecimal.valueOf(dto.getDiscountRate() != null ? dto.getDiscountRate() : 0.0);
-////        bill.setDiscountRate(inputDiscountRate);
-////
-////        BigDecimal discountAmt = BigDecimal.ZERO;
-////        if (dto.getDiscountType() == DiscountType.FLAT) {
-////            discountAmt = inputDiscountRate;
-////        } else if (dto.getDiscountType() == DiscountType.PERCENTAGE) {
-////            discountAmt = subTotal.multiply(inputDiscountRate).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
-////        }
-////        bill.setDiscountAmount(discountAmt.setScale(2, RoundingMode.HALF_UP));
-////
-////        BigDecimal taxableBase = subTotal.subtract(bill.getDiscountAmount());
-////        bill.setTaxType(dto.getTaxType());
-////
-////        BigDecimal inputTaxRate = BigDecimal.valueOf(dto.getTaxRatePercent() != null ? dto.getTaxRatePercent() : 0.0);
-////        bill.setTaxRatePercent(inputTaxRate);
-////
-////        BigDecimal taxAmt = taxableBase.multiply(dto.getTaxRatePercent()).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
-////        bill.setTaxAmount(taxAmt.setScale(2, RoundingMode.HALF_UP));
-////
-////        bill.setGrandTotal(taxableBase.add(bill.getTaxAmount()).setScale(2, RoundingMode.HALF_UP));
-//        bill.setDiscountType(dto.discountType());
-//        BigDecimal inputDiscountRate = BigDecimal.valueOf(dto.discountRate() != null ? dto.discountRate() : 0.0);
-//        bill.setDiscountRate(inputDiscountRate.setScale(2, RoundingMode.HALF_UP));
-//
-//        BigDecimal discountAmt = BigDecimal.ZERO;
-//        if (dto.discountType() == DiscountType.FLAT) {
-//            discountAmt = inputDiscountRate;
-//        } else if (dto.discountType() == DiscountType.PERCENTAGE) {
-//            // Compute with an intermediate high precision scale of 4, then cleanly downcast to 2
-//            discountAmt = subTotal.multiply(inputDiscountRate).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
-//        }
-//        // CRITICAL FIX: Set scale on an isolated instance before invoking entity state mutations
-//        BigDecimal finalDiscountAmount = discountAmt.setScale(2, RoundingMode.HALF_UP);
-//        bill.setDiscountAmount(finalDiscountAmount);
-//
-//        BigDecimal taxableBase = subTotal.subtract(finalDiscountAmount);
-//        bill.setTaxType(dto.taxType());
-// 
-//        BigDecimal inputTaxRate = BigDecimal.valueOf(dto.taxRatePercent() != null ? dto.taxRatePercent() : 0.0);
-//        bill.setTaxRatePercent(inputTaxRate.setScale(2, RoundingMode.HALF_UP));
-//
-//        BigDecimal taxAmt = taxableBase.multiply(inputTaxRate).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
-//        BigDecimal finalTaxAmount = taxAmt.setScale(2, RoundingMode.HALF_UP);
-//        bill.setTaxAmount(finalTaxAmount);
-//
-//        // Final mathematical aggregation step
-//        BigDecimal finalGrandTotal = taxableBase.add(finalTaxAmount).setScale(2, RoundingMode.HALF_UP);
-//        bill.setGrandTotal(finalGrandTotal);
-//    }
-//
-//
-//    @Transactional
-//    public void deleteSalesBill(Long id) {
-//        SalesBill bill = salesBillRepository.findById(id)
-//                .orElseThrow(() -> new RuntimeException("Invoice record not found"));
-//
-//        // FIX 2: Release and save stock entities before initiating parent record sweeps
-//        List<Bundle> bundlesToRelease = new ArrayList<>();
-//        for (SalesBillItem item : bill.getSalesBillItems()) {
-//            Bundle bundle = item.getBundle();
-//            bundle.setStatus(BundleStatus.AVAILABLE);
-//            bundlesToRelease.add(bundle);
-//        }
-//        bundleRepository.saveAll(bundlesToRelease);
-//        bundleRepository.flush();
-//
-//        salesBillRepository.delete(bill);
-//    }
-//
-//    @Transactional(readOnly = true)
-//    public SalesBill getBillById(Long id) { return salesBillRepository.findById(id).orElseThrow(() -> new RuntimeException("Invoice missing.")); }
-//
-//    @Transactional(readOnly = true)
-//    public List<SalesBill> getAllBills() { return salesBillRepository.findAll(); }
-//
-//    @Transactional
-//    public SalesBillResponseDTO createSalesBillDTO(SalesBillRequestDTO dto) {
-//        return salesBillMapper.toDTO(createSalesBill(dto));
-//    }
-//
-//    @Transactional
-//    public SalesBillResponseDTO updateSalesBillDTO(Long billId, SalesBillRequestDTO dto) {
-//        return salesBillMapper.toDTO(updateSalesBill(billId, dto));
-//    }
-//
-//    @Transactional(readOnly = true)
-//    public SalesBillResponseDTO getBillByIdDTO(Long id) {
-//        return salesBillMapper.toDTO(getBillById(id));
-//    }
-//
-////    @Transactional
-////    public SalesBill createSalesBill(SalesBillRequestDTO dto) {
-////        Customer customer = customerRepository.findById(dto.getCustomerId()).orElseThrow(() -> new RuntimeException("Customer records missing."));
-////        SalesBill bill = new SalesBill();
-////        String fy = FinancialYearUtil.getCurrentFinancialYear();
-////        Integer nextSeq = sequenceGeneratorService.getNextSequence("BILL", fy);
-////
-////        bill.setFinancialYear(fy);
-////        bill.setBusinessBillNumber("INV-" + fy + "-" + String.format("%05d", nextSeq));
-////        bill.setBillSequenceNumber(nextSeq);
-////        bill.setCustomer(customer);
-////
-////        calculateAndPopulateBillDetails(bill, dto);
-////        return salesBillRepository.save(bill);
-////    }
-////
-////    @Transactional
-////    public SalesBill updateSalesBill(Long billId, SalesBillRequestDTO dto) {
-////        SalesBill existingBill = salesBillRepository.findById(billId).orElseThrow(() -> new RuntimeException("Invoice not found"));
-////
-////        List<Bundle> bundlesToRelease = new ArrayList<>();
-////        for (SalesBillItem item : existingBill.getSalesBillItems()) {
-////            Bundle b = item.getBundle();
-////            b.setStatus(BundleStatus.AVAILABLE);
-////            bundlesToRelease.add(b);
-////            item.setSalesBill(null);
-////            item.setBundle(null);
-////        }
-////        bundleRepository.saveAll(bundlesToRelease);
-////        existingBill.getSalesBillItems().clear();
-////
-////        salesBillRepository.saveAndFlush(existingBill);
-////        bundleRepository.flush();
-////
-////        calculateAndPopulateBillDetails(existingBill, dto);
-////        existingBill.setUpdatedAt(LocalDateTime.now());
-////
-////        return salesBillRepository.save(existingBill);
-////    }
-////
-////    private void calculateAndPopulateBillDetails(SalesBill bill, SalesBillRequestDTO dto) {
-////        if (dto.getBundleIds() == null || dto.getBundleIds().isEmpty()) { throw new IllegalArgumentException("Requested bundle list cannot be empty."); }
-////        List<Long> distinctBundleIds = dto.getBundleIds().stream().distinct().collect(Collectors.toList());
-////        List<Bundle> bundles = bundleRepository.findAllById(distinctBundleIds);
-////        if(bundles.size() != distinctBundleIds.size()) { throw new IllegalArgumentException("One or more bundles do not exist."); }
-////
-////        List<SalesBillItem> billItems = new ArrayList<>();
-////        BigDecimal subTotal = BigDecimal.ZERO;
-////
-////        for (Bundle bundle : bundles) {
-////            if (bundle.getStatus() == BundleStatus.SOLD) { throw new IllegalStateException("Bundle " + bundle.getBusinessBundleId() + " is already sold."); }
-////
-////            BigDecimal totalMeters = BigDecimal.ZERO;
-////            BigDecimal bundleSubTotal = BigDecimal.ZERO;
-////
-////            for (BundleItem item : bundle.getBundleItems()) {
-////                BigDecimal itemMeters = BigDecimal.valueOf(item.getNumRolls()).multiply(item.getMetersPerRoll());
-////                BigDecimal itemCost = itemMeters.multiply(item.getSnapshotPricePerMeter());
-////                totalMeters = totalMeters.add(itemMeters);
-////                bundleSubTotal = bundleSubTotal.add(itemCost);
-////            }
-////
-////            SalesBillItem billItem = new SalesBillItem();
-////            billItem.setSalesBill(bill); billItem.setBundle(bundle); billItem.setSnapshotTotalMeters(totalMeters); billItem.setSnapshotBundleSubtotal(bundleSubTotal);
-////            billItems.add(billItem);
-////            subTotal = subTotal.add(bundleSubTotal);
-////            bundle.setStatus(BundleStatus.SOLD);
-////        }
-////
-////        bill.setSalesBillItems(billItems);
-////        bill.setSubTotal(subTotal);
-////
-////        bill.setDiscountType(dto.getDiscountType());
-////        BigDecimal inputDiscountRate = BigDecimal.valueOf(dto.getDiscountRate() != null ? dto.getDiscountRate() : 0.0);
-////        bill.setDiscountRate(inputDiscountRate.setScale(2, RoundingMode.HALF_UP));
-////
-////        BigDecimal discountAmt = BigDecimal.ZERO;
-////        if (dto.getDiscountType() == DiscountType.FLAT) { discountAmt = inputDiscountRate; }
-////        else if (dto.getDiscountType() == DiscountType.PERCENTAGE) { discountAmt = subTotal.multiply(inputDiscountRate).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP); }
-////        BigDecimal finalDiscountAmount = discountAmt.setScale(2, RoundingMode.HALF_UP);
-////        bill.setDiscountAmount(finalDiscountAmount);
-////
-////        BigDecimal taxableBase = subTotal.subtract(finalDiscountAmount);
-////        bill.setTaxType(dto.getTaxType());
-////        BigDecimal inputTaxRate = BigDecimal.valueOf(dto.getTaxRatePercent() != null ? dto.getTaxRatePercent() : 0.0);
-////        bill.setTaxRatePercent(inputTaxRate.setScale(2, RoundingMode.HALF_UP));
-////
-////        BigDecimal taxAmt = taxableBase.multiply(inputTaxRate).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
-////        BigDecimal finalTaxAmount = taxAmt.setScale(2, RoundingMode.HALF_UP);
-////        bill.setTaxAmount(finalTaxAmount);
-////
-////        bill.setGrandTotal(taxableBase.add(finalTaxAmount).setScale(2, RoundingMode.HALF_UP));
-////    }
-////
-////    @Transactional
-////    public void deleteSalesBill(Long id) {
-////        SalesBill bill = salesBillRepository.findById(id).orElseThrow(() -> new RuntimeException("Invoice not found"));
-////        List<Bundle> bundlesToRelease = new ArrayList<>();
-////        for (SalesBillItem item : bill.getSalesBillItems()) {
-////            Bundle bundle = item.getBundle(); bundle.setStatus(BundleStatus.AVAILABLE); bundlesToRelease.add(bundle);
-////        }
-////        bundleRepository.saveAll(bundlesToRelease);
-////        bundleRepository.flush();
-////        salesBillRepository.delete(bill);
-////    }
-////
-////    @Transactional(readOnly = true) public SalesBill getBillById(Long id) { return salesBillRepository.findById(id).orElseThrow(() -> new RuntimeException("Invoice missing.")); }
-////    @Transactional(readOnly = true) public List<SalesBill> getAllBills() { return salesBillRepository.findAll(); }
-//
-//}
+
+

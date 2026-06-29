@@ -9,7 +9,7 @@ public class BundleItemResponseDTO {
     private Long fabricId;
     private String fabricName;
     private BigDecimal fabricWidth;
-    private String color; // Added here
+    private String color;
     private Integer numberOfRolls;
     private BigDecimal metersPerRoll;
     private BigDecimal frozenCostPerMeter;

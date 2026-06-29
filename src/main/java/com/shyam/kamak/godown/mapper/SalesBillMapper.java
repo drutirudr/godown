@@ -18,7 +18,6 @@ public interface SalesBillMapper {
 
     @Mapping(target = "customerId", source = "customer.id")
     @Mapping(target = "customerName", source = "customer.name")
-    // ➕ RELATIONAL TABLE AUTO-MAPPING COMPILATION EXTENSIONS
     @Mapping(target = "typeOfBillId", source = "typeOfBill.id")
     @Mapping(target = "typeOfBillName", source = "typeOfBill.name")
     @Mapping(target = "typeOfBillCode", source = "typeOfBill.code")
@@ -27,7 +26,6 @@ public interface SalesBillMapper {
 
     @Mapping(target = "bundleId", source = "bundle.id")
     @Mapping(target = "bundleNumber", source = "bundle.bundleNumber")
-    @Mapping(target = "bundleFinancialYear", source = "bundle.financialYear")
     @Mapping(target = "details", source = "bundle.items")
     SalesBillItemResponseDTO toItemResponseDto(SalesBillItem salesBillItem);
 
@@ -47,23 +45,16 @@ public interface SalesBillMapper {
     @Named("calculateItemValue")
     default BigDecimal calculateItemValue(BundleItem item) {
         if (item == null) return BigDecimal.ZERO;
-        return calculateMeters(item).multiply(item.getFrozenCostPerMeter());
+
+        BigDecimal meters = calculateMeters(item);
+
+        // STRICT UI RENDERING LOGIC:
+        // Use frozen cost ONLY if the bundle is attached to a locked, active invoice record
+        if (item.getBundle() != null && item.getBundle().isSold() && item.getFrozenCostPerMeter() != null) {
+            return meters.multiply(item.getFrozenCostPerMeter());
+        }
+
+        // Default to live master fabric price for new entries, previews, or standalone package queries
+        return meters.multiply(item.getFabric().getCurrentCostPerMeter());
     }
 }
-//import com.shyam.kamak.godown.dto.SalesBillResponseDTO;
-//import com.shyam.kamak.godown.model.SalesBill;
-//import com.shyam.kamak.godown.model.SalesBillItem;
-//import org.mapstruct.Mapper;
-//import org.mapstruct.Mapping;
-//
-//@Mapper(componentModel = "spring")
-//public interface SalesBillMapper {
-//
-//    @Mapping(target = "customerName", source = "customer.customerName")
-//    @Mapping(target = "items", source = "salesBillItems")
-//    SalesBillResponseDTO toDTO(SalesBill salesBill);
-//
-//    @Mapping(target = "bundleNumber", source = "bundle.bundleNumber")
-//    SalesBillResponseDTO.BillItemDetailsDTO toBillItemDetailsDTO(SalesBillItem item);
-//}
-

@@ -8,9 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "sales_bills", uniqueConstraints = {
-        @UniqueConstraint(name = "uq_sales_bill_fy", columnNames = {"bill_number", "financial_year"})
-})
+@Table(name = "sales_bills")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -27,9 +25,6 @@ public class SalesBill extends UserAuditable {
     @Column(name = "bill_number", nullable = false, length = 50)
     private String billNumber;
 
-    @Column(name = "financial_year", nullable = false, length = 10)
-    private String financialYear;
-
     @Column(name = "bill_date", nullable = false)
     private LocalDate billDate;
 
@@ -37,7 +32,6 @@ public class SalesBill extends UserAuditable {
     @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
 
-    // 🛡️ RELATIONAL FIX: Linked Master Table references replacing old static enums
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "type_of_bill_id", nullable = false)
     private TypeOfBill typeOfBill;
@@ -92,6 +86,24 @@ public class SalesBill extends UserAuditable {
 
     @Version
     private Long version;
+
+    /**
+     * Runtime calculated Financial Year based on billDate.
+     * Essential hook for driving sequential tracking bounds securely in code.
+     */
+    @Transient
+    public String getFinancialYear() {
+        if (this.billDate == null) return null;
+
+        int year = this.billDate.getYear();
+        int month = this.billDate.getMonthValue();
+
+        if (month < 4) {
+            return "FY" + ((year - 1) % 100) + "-" + (year % 100);
+        } else {
+            return "FY" + (year % 100) + "-" + ((year + 1) % 100);
+        }
+    }
 
     public void addItem(SalesBillItem item) {
         items.add(item);

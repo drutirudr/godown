@@ -11,11 +11,12 @@ import java.util.Set;
 
 @Data
 public class SalesBillRequestDTO {
+
     @NotNull(message = "Customer ID is required")
     private Long customerId;
 
     @NotNull(message = "TypeOfBill Reference Identifier is required")
-    private Long typeOfBillId; // Links directly to the new master database table row ID
+    private Long typeOfBillId;
 
     @NotNull(message = "Bill Date is required")
     private LocalDate billDate;

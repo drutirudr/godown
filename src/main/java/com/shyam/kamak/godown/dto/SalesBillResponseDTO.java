@@ -11,16 +11,15 @@ import com.shyam.kamak.godown.model.SalesBill;
 public class SalesBillResponseDTO {
     private Long id;
     private String billNumber;
-    private String financialYear;
     private LocalDate billDate;
+    private String financialYear; // Restored field for consumer view integrations
     private Long customerId;
     private String customerName;
 
-    // ➕ EXPANDED MASTER TABLE LOOKUP ATTRIBUTES FOR UI VIEWS
     private Long typeOfBillId;
     private String typeOfBillName;
     private String typeOfBillCode;
-    private String typeOfBillGroup; // Returns FABRIC / YARN / GRANULES safely
+    private String typeOfBillGroup;
 
     private String lrNumber;
     private String lrDate;

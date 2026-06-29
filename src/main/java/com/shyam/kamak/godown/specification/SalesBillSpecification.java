@@ -12,16 +12,17 @@ import com.shyam.kamak.godown.model.TypeOfBill;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 
+
 public class SalesBillSpecification {
 
     public static Specification<SalesBill> getDynamicSearchCriteria(
             String globalSearch,
             String id,
             String billNumber,
-            String financialYear,
             String customerName,
             String grandTotal,
-            String billDate,        // ➕ Added target column query filters
+            LocalDate startDate,     // ⚡ CHANGED TYPE TO LOCALDATE MATCHING YOUR ENGINE
+            LocalDate endDate,       // ⚡ CHANGED TYPE TO LOCALDATE MATCHING YOUR ENGINE
             String lrNumber,
             String transporterName,
             String vehicleNumber,
@@ -30,30 +31,26 @@ public class SalesBillSpecification {
         return (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            // 1. Column Specific Filtering (AND logic block matching AG Grid column filters)
+            // 1. Precise Column Targets (AND Blocks)
             if (id != null && !id.trim().isEmpty()) {
                 predicates.add(criteriaBuilder.equal(root.get("id"), Long.parseLong(id.trim())));
             }
             if (billNumber != null && !billNumber.trim().isEmpty()) {
                 predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("billNumber")), "%" + billNumber.trim().toLowerCase() + "%"));
             }
-            if (financialYear != null && !financialYear.trim().isEmpty()) {
-                predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("financialYear")), "%" + financialYear.trim().toLowerCase() + "%"));
-            }
 
-            // JOIN 1: Filter by Customer Profile Attributes
+            // Customer Profile Join Filter
             if (customerName != null && !customerName.trim().isEmpty()) {
                 Join<SalesBill, Customer> customerJoin = root.join("customer");
                 predicates.add(criteriaBuilder.like(criteriaBuilder.lower(customerJoin.get("name")), "%" + customerName.trim().toLowerCase() + "%"));
             }
 
-            // JOIN 2: Filter by Custom Relational Bill Category Names
+            // Master Billing Type Join Filter
             if (typeOfBillName != null && !typeOfBillName.trim().isEmpty()) {
                 Join<SalesBill, TypeOfBill> typeJoin = root.join("typeOfBill");
                 predicates.add(criteriaBuilder.like(criteriaBuilder.lower(typeJoin.get("name")), "%" + typeOfBillName.trim().toLowerCase() + "%"));
             }
 
-            // ➕ Target Filters for the New Logistics Metrics Columns
             if (lrNumber != null && !lrNumber.trim().isEmpty()) {
                 predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("lrNumber")), "%" + lrNumber.trim().toLowerCase() + "%"));
             }
@@ -64,16 +61,15 @@ public class SalesBillSpecification {
                 predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("vehicleNumber")), "%" + vehicleNumber.trim().toLowerCase() + "%"));
             }
 
-            // Safe Parsing for the New LocalDate Column
-            if (billDate != null && !billDate.trim().isEmpty()) {
-                try {
-                    predicates.add(criteriaBuilder.equal(root.get("billDate"), LocalDate.parse(billDate.trim())));
-                } catch (DateTimeParseException e) {
-                    predicates.add(criteriaBuilder.disjunction()); // Invalidate gracefully on broken user date inputs
-                }
+            // 🚀 INDEX-FRIENDLY CRITERIA BOUNDARY CHECKS USING INJECTED LOCALDATE
+            if (startDate != null && endDate != null) {
+                predicates.add(criteriaBuilder.between(root.get("billDate"), startDate, endDate));
+            } else if (startDate != null) {
+                predicates.add(criteriaBuilder.greaterThanOrEqualTo(root.get("billDate"), startDate));
+            } else if (endDate != null) {
+                predicates.add(criteriaBuilder.lessThanOrEqualTo(root.get("billDate"), endDate));
             }
 
-            // Safe BigDecimal parsing for numeric column inputs
             if (grandTotal != null && !grandTotal.trim().isEmpty()) {
                 try {
                     predicates.add(criteriaBuilder.equal(root.get("grandTotal"), new BigDecimal(grandTotal.trim())));
@@ -82,81 +78,53 @@ public class SalesBillSpecification {
                 }
             }
 
-            // 2. Global Text Input Cross-Cutting Search Override (OR logic block for single-field search bars)
+            // 2. Cross-Cutting Single-Field Global Text Search (OR Blocks)
             if (globalSearch != null && !globalSearch.trim().isEmpty()) {
                 String cleanSearch = "%" + globalSearch.trim().toLowerCase() + "%";
 
                 Join<SalesBill, Customer> customerJoin = root.join("customer");
                 Join<SalesBill, TypeOfBill> typeJoin = root.join("typeOfBill");
 
-                predicates.add(criteriaBuilder.or(
-                        criteriaBuilder.like(criteriaBuilder.lower(root.get("billNumber")), cleanSearch),
-                        criteriaBuilder.like(criteriaBuilder.lower(root.get("financialYear")), cleanSearch),
-                        criteriaBuilder.like(criteriaBuilder.lower(customerJoin.get("name")), cleanSearch),
-                        // ➕ Extended search to automatically scan your new columns
-                        criteriaBuilder.like(criteriaBuilder.lower(typeJoin.get("name")), cleanSearch),
-                        criteriaBuilder.like(criteriaBuilder.lower(root.get("lrNumber")), cleanSearch),
-                        criteriaBuilder.like(criteriaBuilder.lower(root.get("transporterName")), cleanSearch),
-                        criteriaBuilder.like(criteriaBuilder.lower(root.get("vehicleNumber")), cleanSearch),
-                        criteriaBuilder.like(criteriaBuilder.lower(root.get("ewayBillNumber")), cleanSearch),
-                        criteriaBuilder.like(criteriaBuilder.lower(root.get("eInvoiceNumber")), cleanSearch)
-                ));
+                List<Predicate> orPredicates = new ArrayList<>();
+                orPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("billNumber")), cleanSearch));
+                orPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(customerJoin.get("name")), cleanSearch));
+                orPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(typeJoin.get("name")), cleanSearch));
+                orPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("lrNumber")), cleanSearch));
+                orPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("transporterName")), cleanSearch));
+                orPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("vehicleNumber")), cleanSearch));
+                orPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("ewayBillNumber")), cleanSearch));
+                orPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("eInvoiceNumber")), cleanSearch));
+
+                // Dynamically fallback query to locate targeted ranges if input looks like a year label
+                Predicate globalFyPredicate = buildFinancialYearPredicate(globalSearch.trim(), root, criteriaBuilder);
+                if (globalFyPredicate != null) orPredicates.add(globalFyPredicate);
+
+                predicates.add(criteriaBuilder.or(orPredicates.toArray(new Predicate[0])));
             }
 
             return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
         };
     }
+
+    private static Predicate buildFinancialYearPredicate(String input, jakarta.persistence.criteria.Root<SalesBill> root, jakarta.persistence.criteria.CriteriaBuilder cb) {
+        try {
+            String cleanInput = input.toUpperCase().replace("FY", "").replace(" ", "").trim();
+            int startYear;
+
+            if (cleanInput.contains("-")) {
+                String[] parts = cleanInput.split("-");
+                startYear = Integer.parseInt(parts[0].trim());
+                if (startYear < 100) startYear += (startYear < 70) ? 2000 : 1900;
+            } else {
+                startYear = Integer.parseInt(cleanInput);
+                if (startYear < 100) startYear += (startYear < 70) ? 2000 : 1900;
+            }
+
+            LocalDate startRange = LocalDate.of(startYear, 4, 1);
+            LocalDate endRange = LocalDate.of(startYear + 1, 3, 31);
+            return cb.between(root.get("billDate"), startRange, endRange);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }
-
-
-//public class SalesBillSpecification {
-//
-//    public static Specification<SalesBill> getDynamicSearchCriteria(
-//            String globalSearch, String id, String billNumber, String financialYear, String customerName, String grandTotal) {
-//
-//        return (root, query, criteriaBuilder) -> {
-//            List<Predicate> predicates = new ArrayList<>();
-//
-//            // 1. Target Column Filters (AND logic block)
-//            if (id != null && !id.trim().isEmpty()) {
-//                predicates.add(criteriaBuilder.equal(root.get("id"), Long.parseLong(id.trim())));
-//            }
-//            if (billNumber != null && !billNumber.trim().isEmpty()) {
-//                predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("billNumber")), "%" + billNumber.toLowerCase() + "%"));
-//            }
-//            if (financialYear != null && !financialYear.trim().isEmpty()) {
-//                predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("financialYear")), "%" + financialYear.toLowerCase() + "%"));
-//            }
-//
-//            // CRITICAL JOIN: Dynamic SQL Join to filter by customer attributes
-//            if (customerName != null && !customerName.trim().isEmpty()) {
-//                Join<SalesBill, Customer> customerJoin = root.join("customer");
-//                predicates.add(criteriaBuilder.like(criteriaBuilder.lower(customerJoin.get("name")), "%" + customerName.toLowerCase() + "%"));
-//            }
-//
-//            // Safe BigDecimal parsing for numeric column inputs
-//            if (grandTotal != null && !grandTotal.trim().isEmpty()) {
-//                try {
-//                    predicates.add(criteriaBuilder.equal(root.get("grandTotal"), new BigDecimal(grandTotal.trim())));
-//                } catch (NumberFormatException e) {
-//                    predicates.add(criteriaBuilder.disjunction()); // Fail gracefully if non-numbers are entered
-//                }
-//            }
-//
-//            // 2. Global Text Input Cross-Cutting Search Override (OR logic block)
-//            if (globalSearch != null && !globalSearch.trim().isEmpty()) {
-//                String cleanSearch = "%" + globalSearch.toLowerCase() + "%";
-//                Join<SalesBill, Customer> customerJoin = root.join("customer");
-//
-//                predicates.add(criteriaBuilder.or(
-//                        criteriaBuilder.like(criteriaBuilder.lower(root.get("billNumber")), cleanSearch),
-//                        criteriaBuilder.like(criteriaBuilder.lower(root.get("financialYear")), cleanSearch),
-//                        criteriaBuilder.like(criteriaBuilder.lower(customerJoin.get("name")), cleanSearch)
-//                ));
-//            }
-//
-//            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
-//        };
-//    }
-//}
-
