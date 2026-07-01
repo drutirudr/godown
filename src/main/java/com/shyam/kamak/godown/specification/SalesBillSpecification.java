@@ -2,17 +2,18 @@ package com.shyam.kamak.godown.specification;
 
 import com.shyam.kamak.godown.model.SalesBill;
 import com.shyam.kamak.godown.model.Customer;
+import com.shyam.kamak.godown.model.TypeOfBill;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.jpa.domain.Specification;
 import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
-import com.shyam.kamak.godown.model.TypeOfBill;
 import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
 
-
+@Slf4j
 public class SalesBillSpecification {
 
     public static Specification<SalesBill> getDynamicSearchCriteria(
@@ -21,8 +22,8 @@ public class SalesBillSpecification {
             String billNumber,
             String customerName,
             String grandTotal,
-            LocalDate startDate,     // ⚡ CHANGED TYPE TO LOCALDATE MATCHING YOUR ENGINE
-            LocalDate endDate,       // ⚡ CHANGED TYPE TO LOCALDATE MATCHING YOUR ENGINE
+            LocalDate startDate,
+            LocalDate endDate,
             String lrNumber,
             String transporterName,
             String vehicleNumber,
@@ -32,36 +33,36 @@ public class SalesBillSpecification {
             List<Predicate> predicates = new ArrayList<>();
 
             // 1. Precise Column Targets (AND Blocks)
-            if (id != null && !id.trim().isEmpty()) {
+            if (id != null && !id.trim().isEmpty() && !"undefined".equalsIgnoreCase(id.trim())) {
                 predicates.add(criteriaBuilder.equal(root.get("id"), Long.parseLong(id.trim())));
             }
-            if (billNumber != null && !billNumber.trim().isEmpty()) {
+            if (billNumber != null && !billNumber.trim().isEmpty() && !"undefined".equalsIgnoreCase(billNumber.trim())) {
                 predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("billNumber")), "%" + billNumber.trim().toLowerCase() + "%"));
             }
 
-            // Customer Profile Join Filter
-            if (customerName != null && !customerName.trim().isEmpty()) {
-                Join<SalesBill, Customer> customerJoin = root.join("customer");
+            // 🚀 FIXED: Swapped root.join() for safe JoinType.LEFT to prevent inner join text bypasses
+            if (customerName != null && !customerName.trim().isEmpty() && !"undefined".equalsIgnoreCase(customerName.trim())) {
+                Join<SalesBill, Customer> customerJoin = root.join("customer", JoinType.LEFT);
                 predicates.add(criteriaBuilder.like(criteriaBuilder.lower(customerJoin.get("name")), "%" + customerName.trim().toLowerCase() + "%"));
             }
 
-            // Master Billing Type Join Filter
-            if (typeOfBillName != null && !typeOfBillName.trim().isEmpty()) {
-                Join<SalesBill, TypeOfBill> typeJoin = root.join("typeOfBill");
+            // 🚀 FIXED: Swapped root.join() for safe JoinType.LEFT to prevent inner join text bypasses
+            if (typeOfBillName != null && !typeOfBillName.trim().isEmpty() && !"undefined".equalsIgnoreCase(typeOfBillName.trim())) {
+                Join<SalesBill, TypeOfBill> typeJoin = root.join("typeOfBill", JoinType.LEFT);
                 predicates.add(criteriaBuilder.like(criteriaBuilder.lower(typeJoin.get("name")), "%" + typeOfBillName.trim().toLowerCase() + "%"));
             }
 
-            if (lrNumber != null && !lrNumber.trim().isEmpty()) {
+            if (lrNumber != null && !lrNumber.trim().isEmpty() && !"undefined".equalsIgnoreCase(lrNumber.trim())) {
                 predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("lrNumber")), "%" + lrNumber.trim().toLowerCase() + "%"));
             }
-            if (transporterName != null && !transporterName.trim().isEmpty()) {
+            if (transporterName != null && !transporterName.trim().isEmpty() && !"undefined".equalsIgnoreCase(transporterName.trim())) {
                 predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("transporterName")), "%" + transporterName.trim().toLowerCase() + "%"));
             }
-            if (vehicleNumber != null && !vehicleNumber.trim().isEmpty()) {
+            if (vehicleNumber != null && !vehicleNumber.trim().isEmpty() && !"undefined".equalsIgnoreCase(vehicleNumber.trim())) {
                 predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("vehicleNumber")), "%" + vehicleNumber.trim().toLowerCase() + "%"));
             }
 
-            // 🚀 INDEX-FRIENDLY CRITERIA BOUNDARY CHECKS USING INJECTED LOCALDATE
+            // 🚀 INDEX-FRIENDLY CRITERIA BOUNDARY CHECKS
             if (startDate != null && endDate != null) {
                 predicates.add(criteriaBuilder.between(root.get("billDate"), startDate, endDate));
             } else if (startDate != null) {
@@ -70,7 +71,7 @@ public class SalesBillSpecification {
                 predicates.add(criteriaBuilder.lessThanOrEqualTo(root.get("billDate"), endDate));
             }
 
-            if (grandTotal != null && !grandTotal.trim().isEmpty()) {
+            if (grandTotal != null && !grandTotal.trim().isEmpty() && !"undefined".equalsIgnoreCase(grandTotal.trim())) {
                 try {
                     predicates.add(criteriaBuilder.equal(root.get("grandTotal"), new BigDecimal(grandTotal.trim())));
                 } catch (NumberFormatException e) {
@@ -79,11 +80,13 @@ public class SalesBillSpecification {
             }
 
             // 2. Cross-Cutting Single-Field Global Text Search (OR Blocks)
-            if (globalSearch != null && !globalSearch.trim().isEmpty()) {
+            // 🚀 FIXED: Added protective validation check to filter out literal "undefined" string parameters
+            if (globalSearch != null && !globalSearch.trim().isEmpty() && !"undefined".equalsIgnoreCase(globalSearch.trim())) {
                 String cleanSearch = "%" + globalSearch.trim().toLowerCase() + "%";
 
-                Join<SalesBill, Customer> customerJoin = root.join("customer");
-                Join<SalesBill, TypeOfBill> typeJoin = root.join("typeOfBill");
+                // 🚀 FIXED: Ensure global searches use LEFT JOIN queries to maintain row counts accuracy
+                Join<SalesBill, Customer> customerJoin = root.join("customer", JoinType.LEFT);
+                Join<SalesBill, TypeOfBill> typeJoin = root.join("typeOfBill", JoinType.LEFT);
 
                 List<Predicate> orPredicates = new ArrayList<>();
                 orPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("billNumber")), cleanSearch));
@@ -95,12 +98,13 @@ public class SalesBillSpecification {
                 orPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("ewayBillNumber")), cleanSearch));
                 orPredicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("eInvoiceNumber")), cleanSearch));
 
-                // Dynamically fallback query to locate targeted ranges if input looks like a year label
                 Predicate globalFyPredicate = buildFinancialYearPredicate(globalSearch.trim(), root, criteriaBuilder);
                 if (globalFyPredicate != null) orPredicates.add(globalFyPredicate);
 
                 predicates.add(criteriaBuilder.or(orPredicates.toArray(new Predicate[0])));
             }
+            log.info("predicates = ", predicates);
+            log.info("predicates = ", predicates.size());
 
             return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
         };
@@ -109,8 +113,9 @@ public class SalesBillSpecification {
     private static Predicate buildFinancialYearPredicate(String input, jakarta.persistence.criteria.Root<SalesBill> root, jakarta.persistence.criteria.CriteriaBuilder cb) {
         try {
             String cleanInput = input.toUpperCase().replace("FY", "").replace(" ", "").trim();
-            int startYear;
+            if ("undefined".equalsIgnoreCase(cleanInput)) return null;
 
+            int startYear;
             if (cleanInput.contains("-")) {
                 String[] parts = cleanInput.split("-");
                 startYear = Integer.parseInt(parts[0].trim());

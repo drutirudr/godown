@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-@Component // 💡 This tells Spring Boot to create a managed bean for this class automatically
+@Component
 public class SalesBillCalculationEngine {
 
     public SalesBillItem buildSalesBillItem(SalesBill salesBill, Bundle bundle) {
@@ -25,10 +25,13 @@ public class SalesBillCalculationEngine {
                     BigDecimal meters = BigDecimal.valueOf(item.getNumberOfRolls()).multiply(item.getMetersPerRoll());
                     BigDecimal priceToApply;
 
-                    if (salesBill.getId() == null) {
+                    // 🚀 CRITICAL RULE GATE: If the invoice is being generated fresh (id is null) OR the bundle isn't officially sold yet,
+                    // we pull the LIVE master fabric price and permanently freeze it inside the bundle item row context.
+                    if (salesBill.getId() == null || !bundle.isSold() || item.getFrozenCostPerMeter() == null) {
                         priceToApply = item.getFabric().getCurrentCostPerMeter();
-                        item.setFrozenCostPerMeter(priceToApply);
+                        item.setFrozenCostPerMeter(priceToApply); // 🔒 Freeze it permanently right on the node
                     } else {
+                        // For locked, active invoice updates, pull the frozen historical value securely
                         priceToApply = item.getFrozenCostPerMeter();
                     }
 

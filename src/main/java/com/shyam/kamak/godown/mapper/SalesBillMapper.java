@@ -11,7 +11,6 @@ import org.mapstruct.Mapping;
 import org.mapstruct.Named;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 @Mapper(componentModel = "spring")
 public interface SalesBillMapper {
@@ -48,13 +47,13 @@ public interface SalesBillMapper {
 
         BigDecimal meters = calculateMeters(item);
 
-        // STRICT UI RENDERING LOGIC:
-        // Use frozen cost ONLY if the bundle is attached to a locked, active invoice record
+        // 🚀 STRICT UI RENDERING LOGIC MATCHING BUSINESS RULES:
+        // Use the frozen database cost ONLY if the bundle belongs to a finalized, sold invoice record.
         if (item.getBundle() != null && item.getBundle().isSold() && item.getFrozenCostPerMeter() != null) {
             return meters.multiply(item.getFrozenCostPerMeter());
         }
 
-        // Default to live master fabric price for new entries, previews, or standalone package queries
+        // 🎯 For unsold bundles, previews, or standalone package inventory sweeps, always read the LIVE cost from the master fabric table
         return meters.multiply(item.getFabric().getCurrentCostPerMeter());
     }
 }

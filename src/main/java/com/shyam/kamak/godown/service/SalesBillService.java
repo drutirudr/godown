@@ -254,21 +254,30 @@ public class SalesBillService {
         LocalDate finalStartDate = startDate;
         LocalDate finalEndDate = endDate;
 
+        // Today's current reference date context snapshot marker
+        LocalDate today = LocalDate.now();
+
+        // 🚀 TAB CONDITION 1: ACTIVE VIEW (Strictly bounded from Today down to exactly 5 years ago)
         if ("ACTIVE".equalsIgnoreCase(tabViewMode)) {
-            if (finalStartDate == null) finalStartDate = LocalDate.now().minusYears(salesBillHorizonYears);
-            if (finalEndDate == null) finalEndDate = LocalDate.now().plusYears(1);
+            finalStartDate = today.minusYears(salesBillHorizonYears);
+            finalEndDate = today; // 🎯 Clamped at today to prevent cross-tab bleeding
         }
-        // 🚀 THE 2-YEAR ARCHIVE LOCK FIXED: Restricts historical queries to look back exactly 2 years max automatically
+
+        // 🚀 TAB CONDITION 2: HISTORICAL ARCHIVES (Anything older than 5 years, capped to a safe 2-year lookback window)
         else if ("HISTORICAL".equalsIgnoreCase(tabViewMode)) {
-            if (finalStartDate == null && finalEndDate == null && cleanSearch == null) {
-                finalStartDate = LocalDate.now().minusYears(archiveHorizonYears); // Logs look back exactly 2 years max
-                finalEndDate = LocalDate.now().minusYears(salesBillHorizonYears); // Bounded safely at the active edge boundary
-            }
+            // Evaluates to: '7 years ago' (e.g., 2019)
+            finalStartDate = today.minusYears(salesBillHorizonYears + archiveHorizonYears);
+            // Evaluates to: '5 years ago' (e.g., 2021)
+            finalEndDate = today.minusYears(salesBillHorizonYears).minusDays(1);
         }
+
+        // 🚀 TAB CONDITION 3: ALL RECORDS (Strictly requires a date range OR a global search phrase to execute)
         else if ("ALL".equalsIgnoreCase(tabViewMode)) {
+            // 🛡️ DATA SAFETY GATING: If the operator hasn't provided a search query AND hasn't selected dates,
+            // we return an empty slice instantly to protect database threads from a 5,000,000+ full table scan crash.
             if (finalStartDate == null && finalEndDate == null && cleanSearch == null) {
-                finalStartDate = LocalDate.now().minusYears(archiveHorizonYears); // Logs look back exactly 2 years max
-                finalEndDate = LocalDate.now().plusYears(1);
+                log.warn("🛡️ Security block: Broad un-gated query rejected on 'ALL' tab to protect database threads.");
+                return new org.springframework.data.domain.SliceImpl<>(List.of(), pageable, false);
             }
         }
 
@@ -289,9 +298,14 @@ public class SalesBillService {
                 cleanSearch, id, billNumber, customerName, grandTotal, finalStartDate, finalEndDate,
                 lrNumber, transporterName, vehicleNumber, typeOfBillName
         );
+        log.info(String.format(
+                "Active Search Filters -> global: %s, id: %s, billNo: %s, customer: %s, total: %s, dates: [%s to %s]",
+                cleanSearch, id, billNumber, customerName, grandTotal, finalStartDate, finalEndDate
+        ));
+
 
         // 🚀 Leverages your clean high-speed fetch graph method to query data slices instantly!
-        return salesBillRepository.fetchSliceWithGraph(spec, pageable).map(salesBillMapper::toResponseDto);
+        return salesBillRepository.fetchSliceWithSpecification(spec, pageable).map(salesBillMapper::toResponseDto);
     }
 
     private LocalDate parseLocalDateSafely(String dateStr) {

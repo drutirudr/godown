@@ -22,6 +22,7 @@ public interface BundleMapper {
     @Mapping(target = "fabricId", source = "fabric.id")
     @Mapping(target = "fabricName", source = "fabric.name")
     @Mapping(target = "fabricWidth", source = "fabric.width")
+    @Mapping(target = "fabricCurrentCostPerMeter", source = "fabric.currentCostPerMeter")
     @Mapping(target = "itemTotalValue", source = "bundleItem", qualifiedByName = "calculateItemTotal")
     BundleItemResponseDTO toItemResponseDto(BundleItem bundleItem);
 
