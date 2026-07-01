@@ -40,6 +40,7 @@ public class SalesBillRepositoryCustomImpl implements SalesBillRepositoryCustom 
         }
 
         // Apply standardized index sorting rules
+        query.distinct(true);
         query.orderBy(cb.desc(root.get("id")));
 
         TypedQuery<SalesBill> typedQuery = entityManager.createQuery(query);

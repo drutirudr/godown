@@ -57,7 +57,7 @@ public interface BundleRepository extends JpaRepository<Bundle, Long>, JpaSpecif
     Optional<Bundle> findWithItemsById(@Param("id") Long id);
 
     @EntityGraph(attributePaths = {"items", "items.fabric"})
-    @Query("SELECT b FROM Bundle b WHERE b.bundleNumber IN :numbers AND b.isSold = false")
+    @Query("SELECT b FROM Bundle b WHERE b.bundleNumber IN :numbers AND b.sold = false")
     List<Bundle> findAvailableBatchByNumbers(@Param("numbers") List<String> numbers);
 
     Optional<Bundle> findByBundleNumber(String bundleNumber);

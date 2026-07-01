@@ -97,7 +97,7 @@ public class BundleService {
                 .bundleNumber(officialBundleNumber)
                 .bundleDate(request.getBundleDate())
                 .manufacturerCode(request.getManufacturerCode())
-                .isSold(false)
+                .sold(false)
                 .build();
 
         mapAndAttachRequestItems(bundle, request.getItems());

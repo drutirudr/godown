@@ -17,6 +17,7 @@ public interface BundleMapper {
     @Mapping(target = "financialYear", source = "financialYear")
     @Mapping(target = "bundleDate", source = "bundleDate")
     @Mapping(target = "totalBundleValue", source = "items", qualifiedByName = "calculateTotalBundleValue")
+    @Mapping(target = "sold", source = "sold")
     BundleResponseDTO toResponseDto(Bundle bundle);
 
     @Mapping(target = "fabricId", source = "fabric.id")

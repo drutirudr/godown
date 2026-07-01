@@ -33,7 +33,7 @@ public class Bundle extends UserAuditable {
     private String manufacturerCode;
 
     @Column(name = "is_sold", nullable = false)
-    private boolean isSold = false;
+    private boolean sold = false;
 
     @OneToMany(mappedBy = "bundle", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
