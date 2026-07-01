@@ -45,8 +45,7 @@ public interface BundleRepository extends JpaRepository<Bundle, Long>, JpaSpecif
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate
     );
-
-
+    
 
     /**
      * Optimized Single-Trip Fetch:
@@ -60,6 +59,8 @@ public interface BundleRepository extends JpaRepository<Bundle, Long>, JpaSpecif
     @EntityGraph(attributePaths = {"items", "items.fabric"})
     @Query("SELECT b FROM Bundle b WHERE b.bundleNumber IN :numbers AND b.isSold = false")
     List<Bundle> findAvailableBatchByNumbers(@Param("numbers") List<String> numbers);
+
+    Optional<Bundle> findByBundleNumber(String bundleNumber);
 
 //    /**
 //     * 🚀 HIGH-PERFORMANCE SPECIFICATION SLICE FETCH FOR 5M+ ROWS

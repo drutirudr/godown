@@ -160,10 +160,12 @@ public class SalesBillService {
 
     private void attachBundlesToBill(SalesBill salesBill, Set<String> bundleBarcodes, boolean isMockPreview) {
         for (String barcode : bundleBarcodes) {
-            String[] parts = barcodeParser.splitBarcode(barcode);
-            LocalDate[] bounds = barcodeParser.extractDatesFromFinancialYearString(parts[0]);
+            //String[] parts = barcodeParser.splitBarcode(barcode);
+            //LocalDate[] bounds = barcodeParser.extractDatesFromFinancialYearString(parts[0]);
 
-            Bundle bundle = bundleRepository.findByBundleNumberAndDateRange(parts[1], bounds[0], bounds[1])
+//            Bundle bundle = bundleRepository.findByBundleNumberAndDateRange(parts[1], bounds[0], bounds[1])
+//                    .orElseThrow(() -> new ResourceNotFoundException("Bundle match failed for: " + barcode));
+            Bundle bundle = bundleRepository.findByBundleNumber(barcode)
                     .orElseThrow(() -> new ResourceNotFoundException("Bundle match failed for: " + barcode));
 
             if (!isMockPreview) {

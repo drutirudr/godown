@@ -26,7 +26,7 @@ public class BarcodeParsingEngine {
     public LocalDate[] extractDatesFromFinancialYearString(String input) {
         try {
             String clean = input.toUpperCase().replace("FY", "").replace(" ", "").trim();
-            int startYear = Integer.parseInt(clean.split("-")[0]);
+            int startYear = Integer.parseInt(clean.split("-")[1]);
 
             // 🚀 FIXED: All magic threshold numbers are now safely read from the config properties environment
             if (startYear < 100) {
