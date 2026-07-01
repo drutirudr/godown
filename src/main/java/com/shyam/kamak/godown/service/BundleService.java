@@ -1,8 +1,7 @@
 package com.shyam.kamak.godown.service;
 
-import com.shyam.kamak.godown.dto.BundleItemRequestDTO;
-import com.shyam.kamak.godown.dto.BundleRequestDTO;
-import com.shyam.kamak.godown.dto.BundleResponseDTO;
+import com.shyam.kamak.godown.components.BarcodeParsingEngine;
+import com.shyam.kamak.godown.dto.*;
 import com.shyam.kamak.godown.exception.ResourceNotFoundException;
 import com.shyam.kamak.godown.mapper.BundleMapper;
 import com.shyam.kamak.godown.model.Bundle;
@@ -23,10 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -38,6 +34,7 @@ public class BundleService {
     private final FabricRepository fabricRepository;
     private final BundleMapper bundleMapper;
     private final GlobalSequenceRepository globalSequenceRepository;
+    private final BarcodeParsingEngine barcodeParser;
 
     @Value("${godown.data-horizon.years:5}")
     private int dataHorizonYears;
@@ -100,7 +97,7 @@ public class BundleService {
                 .bundleNumber(officialBundleNumber)
                 .bundleDate(request.getBundleDate())
                 .manufacturerCode(request.getManufacturerCode())
-                .sold(false)
+                .isSold(false)
                 .build();
 
         mapAndAttachRequestItems(bundle, request.getItems());
@@ -312,5 +309,23 @@ public class BundleService {
         } catch (java.time.format.DateTimeParseException e) {
             return null;
         }
+    }
+
+    @Transactional(readOnly = true)
+    public List<Bundle> getBatchAvailableByCodes(BundleBatchRequestDTO request) {
+        if (request == null || request.getCodes() == null || request.getCodes().isEmpty()) {
+            throw new ResourceNotFoundException("Empty request payload: No bundle codes provided for batch retrieval.");
+        }
+
+        List<String> rawBundleNumbers = request.getCodes().stream()
+                .map(String::trim)
+                .filter(code -> !code.isEmpty())
+                .distinct()
+                .toList();
+
+//        List<Bundle> bundles = bundleRepository.findAvailableBatchByNumbers(rawBundleNumbers).stream().map(bundleMapper::toResponseDto).toList();
+//        BundleBatchResponseDTO responseEnvelope = new BundleBatchResponseDTO(bundles);
+
+        return bundleRepository.findAvailableBatchByNumbers(rawBundleNumbers);
     }
 }

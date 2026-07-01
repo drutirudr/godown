@@ -3,8 +3,6 @@ package com.shyam.kamak.godown.repository;
 import com.shyam.kamak.godown.model.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Slice; // 🚀 IMPORT SLICE PIPELINE HOOKS
-import org.springframework.data.jpa.domain.Specification; // 🚀 IMPORT SPECIFICATION CONTRACTS
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -58,6 +56,10 @@ public interface BundleRepository extends JpaRepository<Bundle, Long>, JpaSpecif
     @EntityGraph(attributePaths = {"items", "items.fabric"})
     @Query("SELECT b FROM Bundle b WHERE b.id = :id")
     Optional<Bundle> findWithItemsById(@Param("id") Long id);
+
+    @EntityGraph(attributePaths = {"items", "items.fabric"})
+    @Query("SELECT b FROM Bundle b WHERE b.bundleNumber IN :numbers AND b.isSold = false")
+    List<Bundle> findAvailableBatchByNumbers(@Param("numbers") List<String> numbers);
 
 //    /**
 //     * 🚀 HIGH-PERFORMANCE SPECIFICATION SLICE FETCH FOR 5M+ ROWS

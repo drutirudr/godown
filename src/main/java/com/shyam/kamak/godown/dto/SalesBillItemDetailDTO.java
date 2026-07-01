@@ -8,6 +8,7 @@ public class SalesBillItemDetailDTO {
     private Long fabricId;
     private String fabricName;
     private BigDecimal fabricWidth;
+    private BigDecimal fabricCurrentCostPerMeter;
     private String color;
     private Integer numberOfRolls;
     private BigDecimal metersPerRoll;

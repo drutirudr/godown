@@ -1,5 +1,6 @@
 package com.shyam.kamak.godown.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import java.math.BigDecimal;
@@ -19,6 +20,9 @@ public class BundleItem {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "bundle_id", nullable = false)
+    @JsonIgnore // 🔒 THE CRITICAL FIX: Breaks the infinite loop completely!
+    // This stops Jackson from re-serializing the parent bundle object infinitely over the wire,
+    // forcing the controller to instantly emit a clean, standard, parseable JSON array!
     private Bundle bundle;
 
     @ManyToOne(fetch = FetchType.LAZY)

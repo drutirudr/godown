@@ -1,21 +1,18 @@
 package com.shyam.kamak.godown.controller;
 
+import com.shyam.kamak.godown.dto.BundleBatchRequestDTO;
 import com.shyam.kamak.godown.dto.BundleRequestDTO;
 import com.shyam.kamak.godown.dto.BundleResponseDTO;
 import com.shyam.kamak.godown.model.Bundle;
 import com.shyam.kamak.godown.service.BundleService;
-import com.shyam.kamak.godown.specification.BundleSpecification;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.*;
-import org.springframework.data.jpa.domain.Specification;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -95,6 +92,12 @@ public class BundleController {
         // 🚀 Reads cleanly from the tracker table without applying any row locks
         String previewNumber = bundleService.getPreviewSequenceNumber(date);
         return ResponseEntity.ok(previewNumber);
+    }
+
+    @PostMapping(path = "/batch-lookup", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<Bundle>> getBatchAvailableByCodes(@RequestBody BundleBatchRequestDTO request) {
+        List<Bundle> bundles = bundleService.getBatchAvailableByCodes(request);
+        return ResponseEntity.ok(bundles);
     }
 
 }

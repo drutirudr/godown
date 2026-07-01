@@ -31,6 +31,7 @@ public interface SalesBillMapper {
     @Mapping(target = "fabricId", source = "fabric.id")
     @Mapping(target = "fabricName", source = "fabric.name")
     @Mapping(target = "fabricWidth", source = "fabric.width")
+    @Mapping(target = "fabricCurrentCostPerMeter", source = "fabric.currentCostPerMeter")
     @Mapping(target = "totalMeters", source = "bundleItem", qualifiedByName = "calculateMeters")
     @Mapping(target = "totalValue", source = "bundleItem", qualifiedByName = "calculateItemValue")
     SalesBillItemDetailDTO toDetailDto(BundleItem bundleItem);

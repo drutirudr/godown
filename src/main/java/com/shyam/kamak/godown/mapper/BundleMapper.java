@@ -26,6 +26,11 @@ public interface BundleMapper {
     @Mapping(target = "itemTotalValue", source = "bundleItem", qualifiedByName = "calculateItemTotal")
     BundleItemResponseDTO toItemResponseDto(BundleItem bundleItem);
 
+//    // 🚀 FIXED: Changed source from "bundles" to "java(toResponseDtoList(source))" or using a clear expression.
+//    // Even simpler: MapStruct lets you write an expression that calls your existing list mapper method!
+//    @Mapping(target = "bundles", expression = "java(toResponseDtoList(source))")
+//    BundleBatchResponseDTO toBundleBatchResponseDto(List<Bundle> bundles);
+
     @Named("calculateItemTotal")
     default BigDecimal calculateItemTotal(BundleItem item) {
         if (item == null) return BigDecimal.ZERO;
